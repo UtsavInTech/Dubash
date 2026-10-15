@@ -1,0 +1,11 @@
+lang: hi
+vocabulary: demo-india
+tags: [synthetic, code-switch, technical, numbers, negation]
+reference: >-
+  आज हम Kubernetes और cloud migration के बारे में बात करेंगे। हमारी team ने
+  पिछले साल 40 percent cost बचाई। यह feature अभी free नहीं है।
+notes: >-
+  macOS voice Lekha (hi_IN) reading Hinglish. The reference keeps English
+  words in Latin script, as the codemix style would; a recognizer that
+  writes them in Devanagari scores worse on WER here even when it heard
+  them right, which is itself worth knowing.

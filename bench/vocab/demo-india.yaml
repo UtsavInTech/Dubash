@@ -1,0 +1,22 @@
+# Demo vocabulary for the synthetic recordings. Same shape the Dictation
+# Bank will use: a canonical term, other correct spellings (aliases),
+# known mis-hearings, keep-as-is, and approved translations per language.
+terms:
+  - term: Lenguaraz
+    keep: true
+    misheard: [language raz, lengua raz, lingua raz]
+  - term: Sarvam AI
+    aliases: [Sarvam]
+    keep: true
+    misheard: [sarwam, survam]
+  - term: Bengaluru
+    aliases: [Bangalore]
+    translations: {hi: बेंगलुरु, te: బెంగళూరు, kn: ಬೆಂಗಳೂರು}
+  - term: Kubernetes
+    keep: true
+    misheard: [cuber net is, kuber netis]
+  - term: Ananya Rao
+    translations: {hi: अनन्या राव, te: అనన్య రావు, kn: ಅನನ್ಯ ರಾವ್}
+  - term: अनन्या राव
+  - term: QR
+    keep: true

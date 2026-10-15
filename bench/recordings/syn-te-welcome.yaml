@@ -1,0 +1,7 @@
+lang: te
+vocabulary: demo-india
+tags: [synthetic, names]
+reference: >-
+  అందరికీ నమస్కారం. ఈ కార్యక్రమం హైదరాబాద్‌లో జరుగుతోంది. మా ముఖ్య వక్త
+  డాక్టర్ అనన్య రావు.
+notes: macOS voice Geeta (te_IN). Synthetic; smoke test only.
