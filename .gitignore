@@ -1,3 +1,7 @@
 /data/
 .env
 *.log
+.DS_Store
+# Event audio and benchmark output stay local: recordings may be private.
+/bench/recordings/*.wav
+/bench/results/

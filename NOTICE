@@ -1,0 +1,15 @@
+QR Live Captions for India
+Copyright 2026 the lenguaraz India fork contributors
+
+This product is a fork of Lenguaraz (https://github.com/RchrdHndrcks/lenguaraz),
+real-time captions and translation for conferences, by RchrdHndrcks
+and the Lenguaraz contributors, licensed under the Apache License 2.0
+(see LICENSE). Files changed substantially from the original carry a
+notice saying so; files added by this fork carry their own header.
+
+Ideas (not code) for sentence segmentation, translating a language only
+while someone reads it, and translation prompt rules were taken from
+Transept by Chris Mayfield (MIT License).
+
+The bundled typeface Inclusive Sans by Olivia King is licensed under the
+SIL Open Font License (internal/web/static/fonts/OFL-inclusivesans.txt).
