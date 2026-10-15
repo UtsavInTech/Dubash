@@ -52,6 +52,7 @@ type ASRResult struct {
 	Recording  string        `json:"recording"`
 	Lang       string        `json:"lang"`
 	Tags       []string      `json:"tags,omitempty"`
+	Draft      bool          `json:"draftReference,omitempty"`
 	Recognizer string        `json:"recognizer"`
 	WithVocab  bool          `json:"withVocab"`
 	Hints      int           `json:"hints"`
@@ -134,6 +135,9 @@ func Run(ctx context.Context, o Options) (Results, error) {
 				res.ASR = append(res.ASR, o.recognize(ctx, f, r, pcm, vocab, with))
 			}
 		}
+		if r.Draft {
+			continue // an unchecked transcript is no input to judge translation by
+		}
 		for _, t := range o.Translators {
 			for _, dst := range o.Targets {
 				if dst == r.Lang {
@@ -158,7 +162,7 @@ func (o Options) recognize(ctx context.Context, f RecognizerFactory, r Recording
 	}
 	rz := f.New(r, pcm)
 	o.logf("asr  %-24s %-28s vocab=%-5v (%.0f s audio)", r.Name, rz.Name(), with, Seconds(pcm))
-	out := ASRResult{Recording: r.Name, Lang: r.Lang, Tags: r.Tags, Recognizer: rz.Name(), WithVocab: with, Hints: len(hints), Audio: Seconds(pcm)}
+	out := ASRResult{Recording: r.Name, Lang: r.Lang, Tags: r.Tags, Draft: r.Draft, Recognizer: rz.Name(), WithVocab: with, Hints: len(hints), Audio: Seconds(pcm)}
 	rec, err := rz.Recognize(ctx, pcm, r.Lang, hints)
 	out.Rec = rec
 	if err != nil {

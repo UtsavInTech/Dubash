@@ -5,3 +5,5 @@
 # Event audio and benchmark output stay local: recordings may be private.
 /bench/recordings/*.wav
 /bench/results/
+# Clips cut from third-party videos (YouTube): audio and transcripts stay local.
+/bench/recordings/yt-*

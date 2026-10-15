@@ -5,6 +5,7 @@ package bench
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 )
@@ -39,6 +40,15 @@ func (res Results) Markdown(w io.Writer) {
 	if res.Pricing != "" {
 		fmt.Fprintf(w, "Prices: %s Verify before quoting.\n\n", strings.TrimSuffix(res.Pricing, ".")+".")
 	}
+	var drafts []string
+	for _, r := range res.ASR {
+		if r.Draft && !slices.Contains(drafts, r.Recording) {
+			drafts = append(drafts, r.Recording)
+		}
+	}
+	if len(drafts) > 0 {
+		fmt.Fprintf(w, "> **Draft references:** %s. Their transcripts have not been checked by a person, so their WER, term and number scores compare one machine with another, not with what was said. They are left out of the summary.\n\n", strings.Join(drafts, ", "))
+	}
 	res.asrSummary(w)
 	res.mtSummary(w)
 
@@ -48,7 +58,7 @@ func (res Results) Markdown(w io.Writer) {
 	fmt.Fprintln(w, "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
 	for _, r := range res.ASR {
 		fmt.Fprintf(w, "| %s | %s | %s | %s | %s | %s | %d/%d | %d | %d | %d/%d | %d/%d | %s | %s/%s | %s | %s |\n",
-			r.Recording, strings.Join(r.Tags, " "), r.Recognizer, onOff(r.WithVocab), pct(r.WER), pct(r.CER),
+			r.Recording+draftMark(r.Draft), strings.Join(r.Tags, " "), r.Recognizer, onOff(r.WithVocab), pct(r.WER), pct(r.CER),
 			r.Terms.Found, r.Terms.Expected, r.Terms.Inserted, r.Misheard, r.Numbers.Correct, r.Numbers.Expected,
 			r.Negations.Expected, r.Negations.Found, ms(r.Rec.FirstFinal),
 			ms(Percentile(r.Rec.Lags, 50)), ms(Percentile(r.Rec.Lags, 95)), inr(r.CostINR), cell(r.Err))
@@ -79,6 +89,13 @@ func (res Results) Markdown(w io.Writer) {
 	}
 }
 
+func draftMark(d bool) string {
+	if d {
+		return " (draft ref)"
+	}
+	return ""
+}
+
 // cell keeps text inside one table cell.
 func cell(s string) string {
 	return strings.NewReplacer("|", "\\|", "\n", " ").Replace(s)
@@ -98,7 +115,7 @@ func (res Results) asrSummary(w io.Writer) {
 	var order []key
 	m := map[key]*agg{}
 	for _, r := range res.ASR {
-		if r.Err != "" {
+		if r.Err != "" || r.Draft {
 			continue
 		}
 		k := key{r.Recognizer, r.WithVocab}

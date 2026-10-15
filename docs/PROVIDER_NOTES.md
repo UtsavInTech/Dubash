@@ -75,6 +75,32 @@ these show *behaviour*, not accuracy to expect at an event.
   - slight embellishment: "40% cost बचाई" (saved 40% cost) → "saved 40% of the total bill" (te, kn).
 - **Cost observed:** ₹31.3 per audio hour for recognition (per-second rounding per request), about ₹96–98 per audio hour per translated language. Matches the estimate above.
 
+### First real speech (2026-10-16, REST, draft references)
+
+Four 2-minute clips of Dhirendra Krishna Shastri (Bageshwar Dham), cut from
+YouTube: a pravachan, a live Hanumant Katha with crowd and PA, a Divya
+Darbar with devotees, and a TV9 studio interview. Fast, Bundeli-accented
+Hindi; spend ₹7.9. Audio and transcripts stay local (`/bench/recordings/yt-*`
+is git-ignored: third-party content).
+
+References are YouTube's Hindi auto-captions, **not checked by a person**,
+so the numbers measure agreement between two machines, not accuracy:
+
+| Clip | Sarvam vs YouTube WER / CER | Vocabulary effect |
+|---|---|---|
+| pravachan | 9.8% / 5.7% | none |
+| katha, live crowd | 9.9% / 5.6% | +0.6 pt (noise) |
+| darbar | 10.3% / 6.1% | +1.3 pt (noise) |
+| TV9 interview | 6.6% / 3.7% | +0.2 pt (noise) |
+
+What the disagreements are, from a word diff (about 22–29 per clip):
+
+- Mostly **spelling conventions**, not mishearings: यह/ये, वह/वो, यही/यहीं, है/हैं (respectful plural), ठीक-ठाक/ठीक ठाक, "4:00 बजे"/"4 बजे". Hindi has no single standard spelling for speech, so references need a written convention, and scoring may need a lenient Hindi mode that treats such pairs as equal.
+- **Bundeli dialect forms** spelled differently (रुकिया/रुकियो): the reference convention must say whether dialect is kept.
+- **One real omission:** Sarvam dropped "कांग्रेस" (a party name) in the interview. A dropped proper noun is the kind of error the Dictation Bank exists for.
+- The domain vocabulary (`bench/vocab/bageshwar.yaml`, 23 terms) changed nothing measurable: every bank term present in the drafts was already recognized without it.
+- REST latency per ~28 s clip: 0.5–0.8 s median, under 1 s p95.
+
 ### Not yet verified (needs a test)
 
 - Accuracy on real Indian conference speech, Hinglish especially (benchmark pending recordings).

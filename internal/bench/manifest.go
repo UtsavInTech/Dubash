@@ -28,6 +28,13 @@ type Recording struct {
 	// Reference is the exact transcript, in the script the speaker's
 	// language is normally written in, with figures written as digits.
 	Reference string `yaml:"reference"`
+	// Draft marks a reference that no human has checked against the audio
+	// yet (machine captions, a script). Scores against it are not accuracy
+	// figures: the report flags them, keeps them out of the summary, and
+	// does not translate the recording.
+	Draft bool `yaml:"draft"`
+	// Source says where the audio came from (a URL and time range).
+	Source string `yaml:"source"`
 	// Vocabulary names a file in the vocab directory (without .yaml).
 	Vocabulary string `yaml:"vocabulary"`
 	// Tags describe the conditions: accent, code-switch, noise, numbers,

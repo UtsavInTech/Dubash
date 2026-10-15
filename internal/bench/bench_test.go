@@ -297,6 +297,18 @@ func TestRunScripted(t *testing.T) {
 	if _, err := json.Marshal(res); err != nil {
 		t.Error(err)
 	}
+
+	// A draft reference is scored but kept out of the summary and flagged.
+	opt.Recordings[0].Draft = true
+	res, err = Run(context.Background(), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md.Reset()
+	res.Markdown(&md)
+	if !strings.Contains(md.String(), "Draft references:** demo") || strings.Contains(md.String(), "\n| scripted |") || len(res.MT) != 0 {
+		t.Errorf("draft not flagged or still summarized:\n%s", md.String())
+	}
 }
 
 // fakeKeep "translates" by returning the text, so keep-terms survive.
