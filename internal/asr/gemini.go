@@ -12,6 +12,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/genai"
+
+	"github.com/UtsavInTech/dubash/internal/lang"
 )
 
 // DefaultModel is Gemini's dedicated live transcription model.
@@ -51,13 +53,13 @@ const defaultSettleAfter = 800 * time.Millisecond
 // (connecting, backing off, draining); the oldest is dropped beyond it.
 const maxBacklog = 10 * BytesPerSecond
 
-var languageCodes = map[string][]string{
-	"en": {"en-US"},
-	"es": {"es-ES"},
-	"pt": {"pt-BR"},
-	"fr": {"fr-FR"},
-	"de": {"de-DE"},
-	"it": {"it-IT"},
+// languageCodes are the BCP 47 tags Gemini Live is told to expect: Indian
+// English (en-IN) and the Indian languages come from the registry.
+func languageCodes(code string) []string {
+	if t := lang.BCP47(code); t != "" {
+		return []string{t}
+	}
+	return nil
 }
 
 // Gemini transcribes with the Gemini Live API. Each Run holds one session
@@ -144,7 +146,7 @@ func (g *Gemini) connect(ctx context.Context, cfg Config) (liveSession, error) {
 	sess, err := g.Client.Live.Connect(ctx, g.model(), &genai.LiveConnectConfig{
 		ResponseModalities: []genai.Modality{genai.ModalityText},
 		InputAudioTranscription: &genai.AudioTranscriptionConfig{
-			LanguageCodes:    languageCodes[cfg.Lang],
+			LanguageCodes:    languageCodes(cfg.Lang),
 			CustomVocabulary: cfg.Vocabulary,
 		},
 	})

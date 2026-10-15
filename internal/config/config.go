@@ -9,6 +9,8 @@ import (
 	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/UtsavInTech/dubash/internal/lang"
 )
 
 // Room is one stage/session that receives audio and produces captions.
@@ -32,11 +34,7 @@ type Config struct {
 	Rooms []Room `yaml:"rooms"`
 }
 
-var (
-	idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
-	// languages are the codes a room may use, spoken or translated.
-	languages = []string{"en", "es", "pt", "fr", "de", "it"}
-)
+var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // maxGlossary is the most terms the Live API takes as custom vocabulary.
 const maxGlossary = 1000
@@ -69,11 +67,11 @@ func Parse(data []byte) (Config, error) {
 			return Config{}, fmt.Errorf("room %q: duplicate id", r.ID)
 		}
 		seen[r.ID] = true
-		if !slices.Contains(languages, r.Source) {
+		if !lang.Valid(r.Source) {
 			return Config{}, fmt.Errorf("room %q: unsupported source language %q", r.ID, r.Source)
 		}
 		for j, t := range r.Targets {
-			if !slices.Contains(languages, t) || t == r.Source || slices.Contains(r.Targets[:j], t) {
+			if !lang.Valid(t) || t == r.Source || slices.Contains(r.Targets[:j], t) {
 				return Config{}, fmt.Errorf("room %q: invalid target language %q", r.ID, t)
 			}
 		}

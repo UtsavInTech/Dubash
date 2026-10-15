@@ -12,10 +12,12 @@ import (
 const minWordsAfter = 2
 
 // Long sentences are committed in pieces so translated views, which only
-// show finals, do not wait on them. Past softPending the uncommitted text
-// is cut at a clause boundary (", ", "; ", ": ") that leaves a piece of
-// at least minClauseWords; past maxPending, a run-on speaker is cut at
-// any space.
+// show finals, do not wait on them. Past softPending characters the
+// uncommitted text is cut at a clause boundary (", ", "; ", ": ") that
+// leaves a piece of at least minClauseWords; past maxPending, a run-on
+// speaker is cut at any space. Lengths count characters, not bytes: a
+// Devanagari character takes three bytes, and counting bytes cut Hindi
+// three times sooner than English.
 const (
 	softPending    = 100
 	minClauseWords = 5
@@ -61,8 +63,8 @@ func (a *assembler) interim(text string) []Event {
 		prev = end
 	}
 	a.rest = strings.TrimSpace(a.rest[prev:])
-	for len(a.rest) > softPending {
-		cut := runOnCut(a.rest, len(a.rest) > maxPending)
+	for utf8.RuneCountInString(a.rest) > softPending {
+		cut := runOnCut(a.rest, utf8.RuneCountInString(a.rest) > maxPending)
 		if cut <= 0 {
 			break
 		}
@@ -120,7 +122,7 @@ func (a *assembler) final(text string) []Event {
 		prev = end
 	}
 	tail := strings.TrimSpace(rest[prev:])
-	if stale && a.carry != "" || len(tail) > maxPending {
+	if stale && a.carry != "" || utf8.RuneCountInString(tail) > maxPending {
 		return a.commit(out, tail)
 	}
 	a.carry = tail
@@ -133,6 +135,25 @@ func (a *assembler) final(text string) []Event {
 func (a *assembler) endSession() {
 	a.carry = strings.TrimSpace(join(a.carry, a.rest))
 	a.resetUtterance()
+}
+
+// commitWords commits the first n words of the uncommitted text as a
+// final, for recognizers whose interims carry no punctuation (Sarvam's
+// partial transcripts): the engine decides which words are stable enough.
+// It returns the final followed by an interim with the rest.
+func (a *assembler) commitWords(n int) []Event {
+	words := strings.Fields(a.rest)
+	if n <= 0 || len(words) == 0 {
+		return nil
+	}
+	n = min(n, len(words))
+	out := a.commit(nil, strings.Join(words[:n], " "))
+	a.partial += n
+	a.rest = strings.Join(words[n:], " ")
+	if t := strings.TrimSpace(join(a.carry, a.rest)); t != "" {
+		out = append(out, Event{Kind: Interim, Text: t})
+	}
+	return out
 }
 
 // flush emits everything still pending as a final.
@@ -162,9 +183,12 @@ var abbreviations = map[string]bool{
 	"e.g.": true, "i.e.": true, "etc.": true, "vs.": true, "dr.": true, "dra.": true,
 	"mr.": true, "mrs.": true, "ms.": true, "sr.": true, "sra.": true, "prof.": true,
 	"ej.": true, "p.ej.": true, "ud.": true, "uds.": true,
+	"डॉ.": true, "श्री.": true, "सं.": true,
 }
 
-func isTerminal(r rune) bool { return strings.ContainsRune(".?!…", r) }
+// isTerminal ends a sentence: Latin punctuation, and the danda and double
+// danda of Hindi, Marathi, Bengali, Odia and Punjabi text.
+func isTerminal(r rune) bool { return strings.ContainsRune(".?!…।॥", r) }
 
 func isCloser(r rune) bool { return strings.ContainsRune(`"')]»”’`, r) }
 
@@ -222,7 +246,18 @@ func runOnCut(text string, anywhere bool) int {
 	if best > 0 || !anywhere {
 		return best
 	}
-	return strings.LastIndexByte(text[:min(len(text), maxPending)], ' ')
+	return strings.LastIndexByte(text[:runeOffset(text, maxPending)], ' ')
+}
+
+// runeOffset is the byte offset of the n-th rune of text, or len(text).
+func runeOffset(text string, n int) int {
+	for i := range text {
+		if n == 0 {
+			return i
+		}
+		n--
+	}
+	return len(text)
 }
 
 // dropWords returns text without its first n words.

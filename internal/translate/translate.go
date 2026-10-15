@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/UtsavInTech/dubash/internal/lang"
 )
 
 // Translator translates one caption line from src to dst, leaving glossary
@@ -15,17 +17,7 @@ type Translator interface {
 	Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error)
 }
 
-var names = map[string]string{
-	"en": "English", "es": "Spanish", "pt": "Portuguese",
-	"fr": "French", "de": "German", "it": "Italian",
-}
-
-func name(code string) string {
-	if n, ok := names[code]; ok {
-		return n
-	}
-	return code
-}
+func name(code string) string { return lang.Name(code) }
 
 // Prompt is the system instruction for one language pair.
 func Prompt(src, dst string, glossary []string) string {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/lang"
 )
 
 // Recognition is what a recognizer made of one recording.
@@ -170,16 +171,10 @@ func ScriptedEngine(lang, ref string, seconds float64, mishear map[string]string
 	return asr.Fake{Lines: map[string][]string{lang: lines}, Every: max(every, 0.2)}
 }
 
-// bcp47 maps the codes used across dubash to the Indian-English and
-// Indian-language tags Sarvam and most Indian-language APIs expect.
-var bcp47 = map[string]string{
-	"en": "en-IN", "hi": "hi-IN", "te": "te-IN", "kn": "kn-IN", "ta": "ta-IN",
-	"bn": "bn-IN", "mr": "mr-IN", "gu": "gu-IN", "ml": "ml-IN", "pa": "pa-IN",
-}
-
-// BCP47 returns the provider tag for code, or code itself if unknown.
+// BCP47 returns the Sarvam tag for code (en-IN, hi-IN…), or code itself
+// if Sarvam does not know it.
 func BCP47(code string) string {
-	if t, ok := bcp47[code]; ok {
+	if t := lang.Sarvam(code); t != "" {
 		return t
 	}
 	return code
