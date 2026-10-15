@@ -76,3 +76,17 @@ from go.dev into `~/sdk/go`. `go.mod` stays at 1.26.0, as upstream. The
 CI's `staticcheck@v0.8.1` cannot read Go 1.27 export data, so it fails
 locally under Go 1.27; CI uses the `go.mod` version and is unaffected.
 `go vet` and gofmt are clean.
+
+### D10. Scoring ignores the Devanagari nukta
+
+"फ़ोन" and "फोन" are the same word to a reader; recognizers and people use
+the nukta inconsistently. The first Sarvam run counted it as an error, so
+normalization now drops it before comparing.
+
+### D11. Caption script style for Hinglish is an open product decision
+
+Sarvam's `codemix` mode writes English words in Latin script inside Hindi
+captions; the default writes them in Devanagari. Both are correct, and the
+audience's preference may differ by event (a tech conference vs. a
+government training). Phase 1 should expose it per event; until the user
+decides, the default stays the provider's.

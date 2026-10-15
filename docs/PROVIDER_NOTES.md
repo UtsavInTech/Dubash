@@ -53,6 +53,28 @@ These match the figures in the brief. No separate streaming price is listed; we 
 
 Rough cost of one event hour, as an estimate to check against the benchmark: recognition ₹30 once, plus per target language about 12–15 characters of speech per second ≈ 45,000–55,000 characters per hour ≈ ₹90–110 per language per hour. **Translation, not recognition, dominates cost**, so translating only languages someone is reading matters.
 
+### Tested (2026-10-16, REST API, synthetic clips only)
+
+First real calls, on the five synthetic macOS-voice clips (about 51 s of
+audio; total spend about ₹5.5). Synthetic speech is clean and fluent, so
+these show *behaviour*, not accuracy to expect at an event.
+
+- **Keyterms work in English and change output.** Without them: "Our partner Savmaya", "Linguaaz Pilot"; with `Sarvam AI` and `Lenguaraz` as keyterms: "Our partner Sarvam", "Linguaraz pilot" (closer, still wrong: an invented brand name needs more than a hint, i.e. a correction stage). Term recall 3/6 → 4/6, no wrongly inserted terms.
+- **Keyterms had no visible effect on the Hindi, Telugu and Kannada clips**, but those clips were already transcribed (near) perfectly, so this does not show whether they help. Real recordings with hard names are needed.
+- **`saaras:v3` rejects keyterms** (`400: 'keyterms' is only supported by model 'saaras:v4'`), confirming the docs.
+- **`saaras:v4` accepts `mode=codemix` on REST**, although the REST docs list `mode` for v3 only. This matters most for Hinglish:
+  - default mode writes English words in Devanagari: "कुबेरनेट्स और क्लाउड माइग्रेशन … टीम … कॉस्ट … फीचर … फ्री" (WER 30.8% against a Latin-script reference);
+  - `codemix` keeps them in Latin: "Kubernetes और cloud migration … team … cost … feature … free" (WER 3.8%).
+  - On plain Hindi, `codemix` also writes common loanwords in Latin ("phone", "recording", "scan", "QR code", "Doctor"), which is a *style* choice, not an error. Which style an audience prefers should be an event setting; it also changes what the bank's terms must look like.
+- **Number formatting varies.** "499 rupees" came back as "₹499"; "10 बजे" once as "10:00 बजे". Numbers stayed correct; scoring must normalize such forms (it does for ₹ and the digits).
+- **Latency (REST, not streaming):** 0.6–0.9 s median per clip, 1.4–1.5 s p95. Live latency awaits the streaming adapter.
+- **Translate latency: about 1.1 s median, 1.4 s p95 per sentence.** With recognition and sentence commit on top, this uses much of the 2–4 s translated-caption target.
+- **Translate quality, first look:** numbers, negations and dates preserved in every output we read. Problems seen:
+  - unprotected names transliterated: "Lenguaraz" → "लेंगुआरज़ / లెంగ్వారజ్ / ಲೆಂಗುರಾಜ್"; approved "बेंगलुरु" came out "बैंगलोर" from Kannada (terms kept: 33% hi, 20% te, 0% kn). Confirms term protection is needed.
+  - **gender**: Hindi "दोस्तों" (friends) became feminine "friends" in Telugu (స్నేహితురాళ్ళు) and Kannada (ಗೆಳತಿಯರೇ).
+  - slight embellishment: "40% cost बचाई" (saved 40% cost) → "saved 40% of the total bill" (te, kn).
+- **Cost observed:** ₹31.3 per audio hour for recognition (per-second rounding per request), about ₹96–98 per audio hour per translated language. Matches the estimate above.
+
 ### Not yet verified (needs a test)
 
 - Accuracy on real Indian conference speech, Hinglish especially (benchmark pending recordings).

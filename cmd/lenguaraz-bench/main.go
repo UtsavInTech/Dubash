@@ -166,7 +166,7 @@ func recognizers(ctx context.Context, names []string, speed float64) ([]bench.Re
 			if err != nil {
 				return nil, err
 			}
-			s := bench.SarvamREST{Key: key, Model: os.Getenv("SARVAM_ASR_MODEL")}
+			s := bench.SarvamREST{Key: key, Model: os.Getenv("SARVAM_ASR_MODEL"), Mode: os.Getenv("SARVAM_ASR_MODE")}
 			out = append(out, bench.RecognizerFactory{Name: n, Provider: "sarvam", New: func(bench.Recording, []byte) bench.Recognizer { return s }})
 		case "gemini":
 			c, err := gemini(ctx)

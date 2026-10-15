@@ -23,13 +23,20 @@ func asciiDigit(r rune) (rune, bool) {
 	return r, false
 }
 
-// Normalize prepares text for scoring: NFC, lower case, Indic digits as
+// nukta is the Devanagari nukta. Writers and recognizers use it
+// inconsistently ("फ़ोन" and "फोन" are the same word to a reader), so
+// scoring ignores it.
+const nukta = '\u093C'
+
+// Normalize prepares text for scoring: NFC, lower case, nukta dropped, Indic digits as
 // ASCII, digit group separators removed ("1,00,000" → "100000"),
 // apostrophes dropped ("don't" → "dont") and every other punctuation mark,
 // including the danda, turned into a space. Letters and combining marks
 // (the vowel signs of Indic scripts) are kept.
 func Normalize(s string) string {
-	rs := []rune(norm.NFC.String(strings.ToLower(s)))
+	// Decompose first so precomposed nukta letters (U+0958–U+095F) lose it too.
+	s = strings.ReplaceAll(norm.NFD.String(strings.ToLower(s)), string(nukta), "")
+	rs := []rune(norm.NFC.String(s))
 	var b strings.Builder
 	for i, r := range rs {
 		if d, ok := asciiDigit(r); ok {

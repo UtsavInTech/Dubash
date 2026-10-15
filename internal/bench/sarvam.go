@@ -43,14 +43,23 @@ const (
 // streaming path. Streaming latency is measured through EngineRecognizer
 // once the Sarvam streaming engine exists (phase 1).
 type SarvamREST struct {
-	Key    string
-	URL    string // SarvamURL if empty
-	Model  string // saaras:v4 if empty: the only model that takes keyterms
+	Key   string
+	URL   string // SarvamURL if empty
+	Model string // saaras:v4 if empty: the only model that takes keyterms
+	// Mode is transcribe, codemix, verbatim, translit or translate; empty
+	// leaves the API default. The REST docs (2026-10-16) list mode for
+	// saaras:v3 only.
+	Mode   string
 	Client *http.Client
 }
 
 // Name implements Recognizer.
-func (s SarvamREST) Name() string { return "sarvam-rest:" + s.model() }
+func (s SarvamREST) Name() string {
+	if s.Mode != "" {
+		return "sarvam-rest:" + s.model() + ":" + s.Mode
+	}
+	return "sarvam-rest:" + s.model()
+}
 
 func (s SarvamREST) model() string {
 	if s.Model != "" {
@@ -128,6 +137,9 @@ func (s SarvamREST) transcribe(ctx context.Context, pcm []byte, lang string, key
 	fw.Write(EncodeWAV(pcm))
 	mw.WriteField("model", s.model())
 	mw.WriteField("language_code", BCP47(lang))
+	if s.Mode != "" {
+		mw.WriteField("mode", s.Mode)
+	}
 	if len(keyterms) > 0 {
 		kt, _ := json.Marshal(keyterms)
 		mw.WriteField("keyterms", string(kt))

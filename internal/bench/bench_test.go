@@ -28,6 +28,7 @@ func TestNormalize(t *testing.T) {
 		{"२०२६ में", "2026 में"},
 		{"ఈ సంవత్సరం ౨౦౨౬", "ఈ సంవత్సరం 2026"},
 		{"ಕನ್ನಡ॥", "ಕನ್ನಡ"},
+		{"फ़ोन और ज़रूर", "फोन और जरूर"},
 	} {
 		if got := Normalize(c.in); got != c.want {
 			t.Errorf("Normalize(%q) = %q, want %q", c.in, got, c.want)
