@@ -1,4 +1,4 @@
-// Copyright 2026 the lenguaraz India fork contributors. Apache-2.0.
+// Copyright 2026 the Dubash contributors. Apache-2.0.
 
 package bench
 

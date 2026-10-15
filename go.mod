@@ -1,4 +1,4 @@
-module github.com/RchrdHndrcks/lenguaraz
+module github.com/UtsavInTech/dubash
 
 go 1.26.0
 

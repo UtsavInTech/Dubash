@@ -2,7 +2,7 @@
 // page paints so there is no flash. Loaded as a classic script in <head>.
 (function () {
   let p = {};
-  try { p = JSON.parse(localStorage.getItem('lenguaraz.prefs') || '{}'); } catch { /* private mode */ }
+  try { p = JSON.parse(localStorage.getItem('dubash.prefs') || '{}'); } catch { /* private mode */ }
   const d = document.documentElement;
   if (['light', 'dark', 'contrast'].includes(p.theme)) d.dataset.theme = p.theme;
   if (p.size > 0) d.dataset.size = String(p.size);

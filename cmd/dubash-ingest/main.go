@@ -1,10 +1,10 @@
-// Command lenguaraz-ingest feeds a stage's audio into a Lenguaraz room
+// Command dubash-ingest feeds a stage's audio into a Dubash room
 // without a browser. Give it anything ffmpeg can read, or pipe raw PCM16
 // mono 16 kHz on stdin:
 //
-//	lenguaraz-ingest -server https://subs.example.org -room sala-a -i srt://mixer:9000
-//	lenguaraz-ingest -room sala-a -lang es -talk "eBPF en producción" -i talk.mp4 -realtime
-//	ffmpeg -i rtmp://… -f s16le -ac 1 -ar 16000 - | lenguaraz-ingest -room sala-a
+//	dubash-ingest -server https://subs.example.org -room sala-a -i srt://mixer:9000
+//	dubash-ingest -room sala-a -lang es -talk "eBPF en producción" -i talk.mp4 -realtime
+//	ffmpeg -i rtmp://… -f s16le -ac 1 -ar 16000 - | dubash-ingest -room sala-a
 //
 // It reconnects on its own when the network, the server or the source
 // drops, so one process per stage can run unattended for a whole event.
@@ -22,11 +22,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/ingest"
+	"github.com/UtsavInTech/dubash/internal/ingest"
 )
 
 func main() {
-	server := flag.String("server", envOr("LENGUARAZ_URL", "http://localhost:8080"), "Lenguaraz base URL (env LENGUARAZ_URL)")
+	server := flag.String("server", envOr("DUBASH_URL", "http://localhost:8080"), "Dubash base URL (env DUBASH_URL)")
 	roomID := flag.String("room", "", "room id from rooms.yaml (required)")
 	token := flag.String("token", os.Getenv("ADMIN_TOKEN"), "operator token (env ADMIN_TOKEN)")
 	lang := flag.String("lang", "", "language spoken on stage: en, es, pt, fr, de or it (default: the room's current one)")
@@ -38,7 +38,7 @@ func main() {
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	if *roomID == "" {
-		fmt.Fprintln(os.Stderr, "lenguaraz-ingest: -room is required")
+		fmt.Fprintln(os.Stderr, "dubash-ingest: -room is required")
 		flag.Usage()
 		os.Exit(2)
 	}

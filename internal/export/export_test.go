@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
 var segs = []caption.Segment{

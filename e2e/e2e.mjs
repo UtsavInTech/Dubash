@@ -1,6 +1,6 @@
-// End-to-end check of Lenguaraz running with -fake on BASE (see run.sh).
+// End-to-end check of Dubash running with -fake on BASE (see run.sh).
 // Streams sala-a from the operator page (Chromium, bundled EN sample) and
-// sala-b from lenguaraz-ingest (CLI), then checks every public surface.
+// sala-b from dubash-ingest (CLI), then checks every public surface.
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -49,7 +49,7 @@ await op.waitForFunction(() => document.getElementById('status').classList.conta
 check('operator goes live', true);
 
 // CLI ingest (sala-b): 40 s of PCM silence at real time, Spanish, titled talk.
-const ingest = spawn(`${BIN}/lenguaraz-ingest`, ['-server', BASE, '-room', 'sala-b', '-lang', 'es', '-talk', 'Kubernetes en producción', '-realtime'], {
+const ingest = spawn(`${BIN}/dubash-ingest`, ['-server', BASE, '-room', 'sala-b', '-lang', 'es', '-talk', 'Kubernetes en producción', '-realtime'], {
   env: { ...process.env, ADMIN_TOKEN: TOKEN }, stdio: ['pipe', 'ignore', 'pipe'],
 });
 let ingestErr = '';
@@ -208,7 +208,7 @@ check('posters: one QR per room', (await pst.$$('img[src*="/qr/"]')).length === 
 
 // Metrics after traffic.
 const metrics = await (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).text();
-check("metrics expose rooms and lines", /lenguaraz_room_live\{room="sala-a"\} [01]/.test(metrics) && /lenguaraz_room_segments_total\{room="sala-b"\} [1-9]/.test(metrics));
+check("metrics expose rooms and lines", /dubash_room_live\{room="sala-a"\} [01]/.test(metrics) && /dubash_room_segments_total\{room="sala-b"\} [1-9]/.test(metrics));
 
 // Operator: stops by itself when the file ends (en.wav is ~27 s), or by hand.
 if (await op.isEnabled('#stop')) await op.click('#stop');
@@ -216,7 +216,7 @@ await op.waitForFunction(() => !document.getElementById('status').classList.cont
   .then(() => check('operator stops cleanly', true)).catch(() => check('operator stops cleanly', false));
 
 await new Promise((r) => { if (ingest.exitCode !== null) r(); else ingest.on('exit', r); });
-check('lenguaraz-ingest exits 0 at end of input', ingest.exitCode === 0, ingestErr.trim().split('\n').slice(-2).join(' / '));
+check('dubash-ingest exits 0 at end of input', ingest.exitCode === 0, ingestErr.trim().split('\n').slice(-2).join(' / '));
 check('no uncaught JS errors', errors.length === 0, errors.join(' || '));
 
 await browser.close();

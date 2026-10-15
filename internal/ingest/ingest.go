@@ -1,5 +1,5 @@
 // Package ingest streams PCM audio from a local source (ffmpeg reading a
-// stage's SRT/RTMP/HLS feed, a capture card, a file) into a Lenguaraz room,
+// stage's SRT/RTMP/HLS feed, a capture card, a file) into a Dubash room,
 // so a stage can be captioned unattended, without an operator browser.
 package ingest
 
@@ -18,7 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/asr"
 )
 
 // ChunkBytes is 100 ms of wire audio (PCM16 mono 16 kHz).
@@ -155,7 +155,7 @@ func session(ctx context.Context, endpoint string, chunks <-chan []byte, log *sl
 			}
 		}
 		if errors.Is(err, syscall.ECONNREFUSED) {
-			return 0, fmt.Errorf("nothing is listening at %s: is the Lenguaraz server running? (%w)", redact(endpoint), err)
+			return 0, fmt.Errorf("nothing is listening at %s: is the Dubash server running? (%w)", redact(endpoint), err)
 		}
 		return 0, err
 	}

@@ -7,12 +7,12 @@
 | Go unit and integration tests | `go test -race ./...` | All 10 tested packages pass (8 upstream + `internal/bench`) |
 | Vet / format | `go vet ./...`, `gofmt -l .` | Clean |
 | Browser end to end | `(cd e2e && npm ci && npx playwright install chromium && ./run.sh)` | 49 passed, 0 failed |
-| Fake server smoke | `ADMIN_TOKEN=x go run ./cmd/lenguaraz -fake`, then `head -c 384000 /dev/zero \| go run ./cmd/lenguaraz-ingest -room sala-a -token x -realtime` | Interims, finals with translations, SRT export and metrics all work |
+| Fake server smoke | `ADMIN_TOKEN=x go run ./cmd/dubash -fake`, then `head -c 384000 /dev/zero \| go run ./cmd/dubash-ingest -room sala-a -token x -realtime` | Interims, finals with translations, SRT export and metrics all work |
 | staticcheck | `go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...` | Fails locally under Go 1.27 (tool too old for its export data); CI runs it on Go 1.26 |
 
 The e2e suite needs port 8080 free.
 
-## Benchmark (`cmd/lenguaraz-bench`)
+## Benchmark (`cmd/dubash-bench`)
 
 Measures recognition and translation providers on recorded audio. Every
 measurement is taken on the same audio with and without the vocabulary,
@@ -20,14 +20,14 @@ so the vocabulary's effect is the difference between two rows.
 
 ```bash
 # Offline: scripted recognizer and fake translator, no API calls
-go run ./cmd/lenguaraz-bench -asr scripted -translate fake
+go run ./cmd/dubash-bench -asr scripted -translate fake
 
 # Sarvam: recognition (REST, saaras:v4) and translation
 set -a; source .env; set +a          # SARVAM_API_KEY
-go run ./cmd/lenguaraz-bench -asr sarvam -translate sarvam -to hi,te,kn
+go run ./cmd/dubash-bench -asr sarvam -translate sarvam -to hi,te,kn
 
 # Only some recordings, only with vocabulary
-go run ./cmd/lenguaraz-bench -asr sarvam -translate '' -only hi- -vocab on
+go run ./cmd/dubash-bench -asr sarvam -translate '' -only hi- -vocab on
 ```
 
 It prints a cost estimate and **refuses to run above `-budget` rupees

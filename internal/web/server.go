@@ -23,10 +23,10 @@ import (
 	"github.com/coder/websocket"
 	"rsc.io/qr"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
-	"github.com/RchrdHndrcks/lenguaraz/internal/export"
-	"github.com/RchrdHndrcks/lenguaraz/internal/room"
-	"github.com/RchrdHndrcks/lenguaraz/internal/store"
+	"github.com/UtsavInTech/dubash/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/export"
+	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/store"
 )
 
 //go:embed static
@@ -524,7 +524,7 @@ func (s *Server) listTalks(w http.ResponseWriter, r *http.Request) {
 }
 
 // newTalk starts a new talk in a room, titled by the title form value,
-// so a room fed without interruption (lenguaraz-ingest) is exported talk
+// so a room fed without interruption (dubash-ingest) is exported talk
 // by talk.
 func (s *Server) newTalk(w http.ResponseWriter, r *http.Request) {
 	rm, ok := s.room(w, r)

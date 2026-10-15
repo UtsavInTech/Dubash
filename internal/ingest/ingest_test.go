@@ -12,12 +12,12 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
-	"github.com/RchrdHndrcks/lenguaraz/internal/config"
-	"github.com/RchrdHndrcks/lenguaraz/internal/room"
-	"github.com/RchrdHndrcks/lenguaraz/internal/store"
-	"github.com/RchrdHndrcks/lenguaraz/internal/translate"
-	"github.com/RchrdHndrcks/lenguaraz/internal/web"
+	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/store"
+	"github.com/UtsavInTech/dubash/internal/translate"
+	"github.com/UtsavInTech/dubash/internal/web"
 )
 
 func newServer(t *testing.T) (*httptest.Server, *store.Store) {
@@ -113,7 +113,7 @@ func TestStreamExplainsARefusedConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	_, err := session(ctx, "ws://127.0.0.1:1/ingest/sala-a", make(chan []byte), slog.New(slog.DiscardHandler))
-	if err == nil || !strings.Contains(err.Error(), "is the Lenguaraz server running?") {
+	if err == nil || !strings.Contains(err.Error(), "is the Dubash server running?") {
 		t.Fatalf("err = %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-// Command lenguaraz serves real-time conference captions.
+// Command dubash serves real-time conference captions.
 package main
 
 import (
@@ -16,12 +16,12 @@ import (
 
 	"google.golang.org/genai"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
-	"github.com/RchrdHndrcks/lenguaraz/internal/config"
-	"github.com/RchrdHndrcks/lenguaraz/internal/room"
-	"github.com/RchrdHndrcks/lenguaraz/internal/store"
-	"github.com/RchrdHndrcks/lenguaraz/internal/translate"
-	"github.com/RchrdHndrcks/lenguaraz/internal/web"
+	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/store"
+	"github.com/UtsavInTech/dubash/internal/translate"
+	"github.com/UtsavInTech/dubash/internal/web"
 )
 
 func main() {
@@ -81,7 +81,7 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	log.Info("lenguaraz listening", "addr", addr, "rooms", len(rs),
+	log.Info("dubash listening", "addr", addr, "rooms", len(rs),
 		"asr", fmt.Sprintf("%T", engine), "translator", fmt.Sprintf("%T", translator))
 
 	select {

@@ -1,4 +1,4 @@
-# Gap analysis: lenguaraz today vs. the India target
+# Gap analysis: upstream Lenguaraz vs. the India target
 
 Phase 0. Upstream commit `b6ac70c`, read 2026-10-16. Every claim below was
 checked against the code; file references are `path:line`.
@@ -16,7 +16,7 @@ in the code.
 | Audio via AudioWorklet in the operator browser | True | `internal/web/static/js/pcm-worklet.js`, `operator.js`. |
 | One pipeline goroutine per room | True, more precisely | `Room.Run` (`internal/room/room.go:184`) starts a meter goroutine, an ASR goroutine and a finals goroutine, and one goroutine per target language per segment (`room.go:346`). |
 | `asr.Engine` and `translate.Translator` interfaces | True | `internal/asr/asr.go`, `internal/translate/translate.go`. |
-| Gemini Live or Whisper (`ASR_URL`); Gemini or OpenAI-compatible (`TRANSLATE_URL`) | True | `cmd/lenguaraz/main.go` `backends()`. Translation via Gemini is wrapped in a hedger (`translate/hedge.go`, second request after 1.5 s). |
+| Gemini Live or Whisper (`ASR_URL`); Gemini or OpenAI-compatible (`TRANSLATE_URL`) | True | `cmd/dubash/main.go` `backends()`. Translation via Gemini is wrapped in a hedger (`translate/hedge.go`, second request after 1.5 s). |
 | SSE delivery, last 50 lines replayed on reconnect | True, with a caveat | `ringSize = 50` (`room.go:23`). Replay is "the last 50", not "everything after sequence N": a client that was away for more than 50 lines silently loses the gap. The client dedupes by segment id (`viewer.js:326`). |
 | Per-room JSONL storage | True | `internal/store/store.go`. Written synchronously on the caption path (`room.go:371`) **before** the final is published, against the brief's "the live path must not wait for a database write". |
 | QR pages at `/qr/{room}` | True | `server.go:195`. The QR encodes `/r/{room}`, a permanent public URL, not an opaque code. |
@@ -28,14 +28,14 @@ in the code.
 | Playwright E2E tests | True | `e2e/`: 49 checks, all pass (see TESTING.md). |
 | Docker Compose | True | Refuses to start without `ADMIN_TOKEN`. |
 | `-fake` mode | True | `asr.Fake`, `translate.Fake`. Works (checked). |
-| Run with `go run ./cmd/lenguaraz` | True | |
+| Run with `go run ./cmd/dubash` | True | |
 | Operator console needs Chrome/Edge and a secure context | Mostly | The code checks features (`AudioWorkletNode`, `isSecureContext`), not the browser (`operator.js:204`); current Firefox and Safari have both, so the "Chrome/Edge only" claim is conservative. Untested on them. |
 | Only six European languages | True | Hard-coded in 4 places: `config/config.go:38`, `translate/translate.go:18`, `asr/gemini.go:54`, `static/js/langs.js:2`, plus the viewer's UI string table (`viewer.js` `UI`). |
 | No shared state between instances; manual sharding | True | README "Scaling to more rooms". |
 
 Not in the brief but in the repo, and worth keeping:
 
-- `cmd/lenguaraz-ingest`: headless ingest from ffmpeg (SRT/RTMP/HLS, capture card), reconnects with backoff and keeps only the last 5 s while disconnected (`internal/ingest/ingest.go:29`). This is the "clean feed from the mixer" path, without a browser.
+- `cmd/dubash-ingest`: headless ingest from ffmpeg (SRT/RTMP/HLS, capture card), reconnects with backoff and keeps only the last 5 s while disconnected (`internal/ingest/ingest.go:29`). This is the "clean feed from the mixer" path, without a browser.
 - A sentence assembler for streaming ASR (`internal/asr/assemble.go`): commits stable sentences from interims, cuts run-ons at clause boundaries. Directly relevant to "provisional vs committed".
 - Live-session rotation, stall detection and a bounded audio backlog in the Gemini engine (`gemini.go`, `maxBacklog = 10 s` at line 52).
 - Talks within a room, and per-talk exports.
@@ -84,7 +84,7 @@ Upstream specifics that need changing for India:
 | Admin console: setup, bank, rehearsal, monitoring, live fixes, pause, end, export with retention | Partial | `/admin`: per-room live/level/audience/latency/errors, new talk, exports. Missing: setup UI, bank, rehearsal, listeners **per language** (only per room), live word fixes, pause, end, retention. |
 | Dictation Bank | Missing | Glossary list only. |
 | Document processing workers | Missing | |
-| Rehearsal with and without bank | Missing | The benchmark (`cmd/lenguaraz-bench`, added in phase 0) is the offline precursor. |
+| Rehearsal with and without bank | Missing | The benchmark (`cmd/dubash-bench`, added in phase 0) is the offline precursor. |
 
 ### Data model
 
@@ -111,7 +111,7 @@ nothing records it today.
 
 | Item | Status |
 |---|---|
-| WER, bank-term recall, wrongly inserted terms, numbers, negations, terminology consistency, added latency, with/without bank | **Added in phase 0** as `cmd/lenguaraz-bench` (see TESTING.md). Correction-stage latency is not measurable until that stage exists. |
+| WER, bank-term recall, wrongly inserted terms, numbers, negations, terminology consistency, added latency, with/without bank | **Added in phase 0** as `cmd/dubash-bench` (see TESTING.md). Correction-stage latency is not measurable until that stage exists. |
 | Adversarial tests (changed number, ambiguous word, accent, code-switching) | Harness supports tagged recordings; the real recordings are needed. Synthetic code-switch and negation clips exist for smoke tests only. |
 | Provider claims verified | See PROVIDER_NOTES.md. |
 

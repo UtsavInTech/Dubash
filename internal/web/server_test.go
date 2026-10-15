@@ -21,13 +21,13 @@ import (
 	"github.com/coder/websocket"
 	"rsc.io/qr"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
-	"github.com/RchrdHndrcks/lenguaraz/internal/config"
-	"github.com/RchrdHndrcks/lenguaraz/internal/export"
-	"github.com/RchrdHndrcks/lenguaraz/internal/room"
-	"github.com/RchrdHndrcks/lenguaraz/internal/store"
-	"github.com/RchrdHndrcks/lenguaraz/internal/translate"
+	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/export"
+	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/store"
+	"github.com/UtsavInTech/dubash/internal/translate"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {
@@ -511,10 +511,10 @@ func TestMetrics(t *testing.T) {
 		t.Fatalf("metrics: %d", resp.StatusCode)
 	}
 	for _, want := range []string{
-		"# TYPE lenguaraz_room_live gauge\n",
-		`lenguaraz_room_live{room="sala-a"} 0` + "\n",
-		`lenguaraz_room_segments_total{room="sala-b"} 0` + "\n",
-		`lenguaraz_room_audio_level_dbfs{room="sala-a"} -99` + "\n",
+		"# TYPE dubash_room_live gauge\n",
+		`dubash_room_live{room="sala-a"} 0` + "\n",
+		`dubash_room_segments_total{room="sala-b"} 0` + "\n",
+		`dubash_room_audio_level_dbfs{room="sala-a"} -99` + "\n",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics missing %q:\n%s", want, body)

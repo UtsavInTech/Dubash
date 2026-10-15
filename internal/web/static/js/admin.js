@@ -2,10 +2,10 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 
 function storedToken() {
-  try { return localStorage.getItem('lenguaraz.token') ?? ''; } catch { return ''; }
+  try { return localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
 }
 $('token').value = params.get('token') ?? storedToken();
-$('token').onchange = () => { try { localStorage.setItem('lenguaraz.token', $('token').value); } catch { /* private mode */ } refresh(); };
+$('token').onchange = () => { try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ } refresh(); };
 
 function ago(iso) {
   if (!iso || iso.startsWith('0001')) return '—';

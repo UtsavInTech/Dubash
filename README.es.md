@@ -1,4 +1,4 @@
-# Lenguaraz
+# Dubash
 
 **Subtítulos y traducción en vivo, de código abierto, para conferencias.**
 El audio de cada escenario se convierte en subtítulos en el idioma original y
@@ -6,8 +6,9 @@ traducidos al español, inglés, portugués, francés, alemán o italiano, para
 muchas salas a la vez.
 Hecho para la Vibeathon de [Nerdearla](https://nerdear.la) 2026.
 
-> *Lenguaraz*: así se llamaba a los intérpretes que mediaban entre lenguas en
-> la historia del Río de la Plata.
+> Este archivo es la guía del proyecto original,
+> [Lenguaraz](https://github.com/RchrdHndrcks/lenguaraz), del que Dubash es
+> un fork para la India. Describe las funciones de Lenguaraz.
 
 *English: [README.md](README.md).*
 
@@ -22,7 +23,7 @@ Hecho para la Vibeathon de [Nerdearla](https://nerdear.la) 2026.
   Ollama) para traducir, en tu propio hardware y sin internet. Ver
   [Correrlo 100% local](#correrlo-100-local).
 - **Tres formas de meter audio:** la consola web del operador (micrófono,
-  línea del mixer o un archivo), o `lenguaraz-ingest`, que toma el stream
+  línea del mixer o un archivo), o `dubash-ingest`, que toma el stream
   del escenario (SRT, RTMP, HLS, placa de captura) y se reconecta solo.
 - **La audiencia elige sala e idioma** en el celular, o escanea el QR de la
   sala y le abre directamente en el idioma de su teléfono.
@@ -79,20 +80,20 @@ rooms:
 
 Si en la misma sala hay charlas en otro idioma, no hace falta tocar nada: al
 transmitir, el operador elige el idioma que se habla (selector **Idioma que se
-habla** en la consola, o `-lang es` en `lenguaraz-ingest`) y los demás idiomas
+habla** en la consola, o `-lang es` en `dubash-ingest`) y los demás idiomas
 de la sala pasan a ser las traducciones.
 
 ### 3. Levantalo
 
 ```bash
-git clone https://github.com/RchrdHndrcks/lenguaraz && cd lenguaraz
+git clone https://github.com/UtsavInTech/dubash && cd dubash
 export GEMINI_API_KEY=...  ADMIN_TOKEN=un-secreto  PUBLIC_URL=https://subs.tuevento.org
 docker compose up -d --build
 ```
 
 Idiomas disponibles: `en`, `es`, `pt`, `fr`, `de`, `it`.
 
-Sin API key, para probar: `go run ./cmd/lenguaraz -fake` (subtítulos guionados).
+Sin API key, para probar: `go run ./cmd/dubash -fake` (subtítulos guionados).
 
 ### 4. Conectá el audio de cada escenario
 
@@ -102,9 +103,9 @@ https): elegí el micrófono o la entrada de línea y tocá **Transmitir**.
 **Opción B — sin navegador**, desde la máquina de streaming:
 
 ```bash
-go install ./cmd/lenguaraz-ingest   # desde el repo; queda en $(go env GOPATH)/bin
-export LENGUARAZ_URL=https://subs.tuevento.org ADMIN_TOKEN=un-secreto
-lenguaraz-ingest -room sala-a -lang en -talk "Keynote de apertura" -i srt://mixer.local:9000
+go install ./cmd/dubash-ingest   # desde el repo; queda en $(go env GOPATH)/bin
+export DUBASH_URL=https://subs.tuevento.org ADMIN_TOKEN=un-secreto
+dubash-ingest -room sala-a -lang en -talk "Keynote de apertura" -i srt://mixer.local:9000
 ```
 
 Un proceso por sala. Si se corta la red o el stream, reintenta solo.
@@ -113,7 +114,7 @@ Un proceso por sala. Si se corta la red o el stream, reintenta solo.
 
 Cada línea de subtítulo pertenece a una charla. Empieza una charla nueva
 cuando el operador transmite con un título nuevo (campo **Charla** de la
-consola, o `-talk` en `lenguaraz-ingest`), cuando producción toca **Nueva
+consola, o `-talk` en `dubash-ingest`), cuando producción toca **Nueva
 charla** en el panel (sin cortar el audio), o cuando la sala estuvo más de 5
 minutos sin transmitir. Al terminar, el público descarga **Esta charla** o
 **Toda la sala**, y producción la baja con
@@ -143,7 +144,7 @@ el [README en inglés](README.md#scaling-to-more-rooms).
 ## Correrlo 100% local
 
 Para sedes sin buena conexión, o eventos que no pueden mandar audio a la
-nube, las dos mitades corren en tu hardware. Lenguaraz habla las APIs
+nube, las dos mitades corren en tu hardware. Dubash habla las APIs
 compatibles con OpenAI que exponen los servidores de modelos locales:
 
 ```bash
@@ -155,12 +156,12 @@ whisper-server -m models/ggml-large-v3-turbo.bin --host 0.0.0.0 --port 8000 \
 ollama pull gemma3
 
 ASR_URL=http://localhost:8000/v1 TRANSLATE_URL=http://localhost:11434/v1 \
-  ADMIN_TOKEN=un-secreto go run ./cmd/lenguaraz
+  ADMIN_TOKEN=un-secreto go run ./cmd/dubash
 ```
 
 Con Docker Compose usá `http://host.docker.internal:…`. Sin `GEMINI_API_KEY`
 alcanza; también se puede mezclar (Gemini para transcribir y Gemma para
-traducir). Whisper recibe archivos, no streams: Lenguaraz corta el audio en
+traducir). Whisper recibe archivos, no streams: Dubash corta el audio en
 las pausas de quien habla (máximo 10 s) y los subtítulos llegan de a una
 frase. Se recomienda GPU o Apple Silicon para varias salas.
 

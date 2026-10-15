@@ -59,7 +59,7 @@ First real calls, on the five synthetic macOS-voice clips (about 51 s of
 audio; total spend about ₹5.5). Synthetic speech is clean and fluent, so
 these show *behaviour*, not accuracy to expect at an event.
 
-- **Keyterms work in English and change output.** Without them: "Our partner Savmaya", "Linguaaz Pilot"; with `Sarvam AI` and `Lenguaraz` as keyterms: "Our partner Sarvam", "Linguaraz pilot" (closer, still wrong: an invented brand name needs more than a hint, i.e. a correction stage). Term recall 3/6 → 4/6, no wrongly inserted terms.
+- **Keyterms work in English and change output.** Without them: "Our partner Savmaya", "Linguaaz Pilot"; with `Sarvam AI` and `Lenguaraz` (the project's name at the time) as keyterms: "Our partner Sarvam", "Linguaraz pilot" (closer, still wrong: an invented brand name needs more than a hint, i.e. a correction stage). Term recall 3/6 → 4/6, no wrongly inserted terms.
 - **Keyterms had no visible effect on the Hindi, Telugu and Kannada clips**, but those clips were already transcribed (near) perfectly, so this does not show whether they help. Real recordings with hard names are needed.
 - **`saaras:v3` rejects keyterms** (`400: 'keyterms' is only supported by model 'saaras:v4'`), confirming the docs.
 - **`saaras:v4` accepts `mode=codemix` on REST**, although the REST docs list `mode` for v3 only. This matters most for Hinglish:

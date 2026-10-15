@@ -2,9 +2,9 @@
 # Bank will use: a canonical term, other correct spellings (aliases),
 # known mis-hearings, keep-as-is, and approved translations per language.
 terms:
-  - term: Lenguaraz
+  - term: Dubash
     keep: true
-    misheard: [language raz, lengua raz, lingua raz]
+    misheard: [the bash, do bash, doobash]
   - term: Sarvam AI
     aliases: [Sarvam]
     keep: true

@@ -1,13 +1,13 @@
 {
-  "name": "lenguaraz-promo",
+  "name": "dubash-promo",
   "private": true,
   "version": "1.0.0",
-  "description": "Promo video for Lenguaraz, made with Remotion",
+  "description": "Promo video for Dubash, made with Remotion",
   "scripts": {
     "music": "python3 make-music.py public/music.wav 68",
     "capture": "capture/run.sh",
     "studio": "npm run music && remotion studio",
-    "render": "npm run music && remotion render Promo out/lenguaraz.mp4 --codec=h264 --crf=18"
+    "render": "npm run music && remotion render Promo out/dubash.mp4 --codec=h264 --crf=18"
   },
   "dependencies": {
     "@remotion/cli": "4.0.529",

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
 func TestAppendAndLoad(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
 func seg(id int) caption.Segment {

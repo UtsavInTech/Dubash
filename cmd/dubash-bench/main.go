@@ -1,12 +1,12 @@
-// Copyright 2026 the lenguaraz India fork contributors. Apache-2.0.
+// Copyright 2026 the Dubash contributors. Apache-2.0.
 
-// Command lenguaraz-bench measures speech recognition and translation
+// Command dubash-bench measures speech recognition and translation
 // providers on recorded audio, with and without a vocabulary list: word
 // and character error rate, vocabulary term accuracy, wrongly inserted
 // terms, numbers, negations, latency and cost. See docs/TESTING.md.
 //
-//	lenguaraz-bench -asr scripted -translate fake            # no API calls
-//	lenguaraz-bench -asr sarvam -translate sarvam -to hi,te,kn
+//	dubash-bench -asr scripted -translate fake            # no API calls
+//	dubash-bench -asr sarvam -translate sarvam -to hi,te,kn
 package main
 
 import (
@@ -22,9 +22,9 @@ import (
 
 	"google.golang.org/genai"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
-	"github.com/RchrdHndrcks/lenguaraz/internal/bench"
-	"github.com/RchrdHndrcks/lenguaraz/internal/translate"
+	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/bench"
+	"github.com/UtsavInTech/dubash/internal/translate"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func main() {
 	flag.Parse()
 
 	if err := run(*dir, *asrList, *mtList, *to, *vocab, *only, *speed, *out, *budget, *yes); err != nil {
-		fmt.Fprintln(os.Stderr, "lenguaraz-bench:", err)
+		fmt.Fprintln(os.Stderr, "dubash-bench:", err)
 		os.Exit(1)
 	}
 }

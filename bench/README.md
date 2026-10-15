@@ -37,7 +37,7 @@ bench/
    notes: Speaker from Lucknow, hall PA, applause at 1:10.
    ```
 
-3. Run `go run ./cmd/lenguaraz-bench -only hi-panel`.
+3. Run `go run ./cmd/dubash-bench -only hi-panel`.
 
 ## Vocabulary file
 

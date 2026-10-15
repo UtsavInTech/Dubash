@@ -5,7 +5,7 @@ open, with the reason. Newest last.
 
 ## Phase 0 (2026-10-16)
 
-### D1. The benchmark is Go, inside the repo (`cmd/lenguaraz-bench`, `internal/bench`)
+### D1. The benchmark is Go, inside the repo (`cmd/dubash-bench`, `internal/bench`)
 
 The brief asks for a "standalone benchmark script". It is standalone in use
 (its own command, its own `bench/` directory, no server needed) but written
@@ -90,3 +90,22 @@ captions; the default writes them in Devanagari. Both are correct, and the
 audience's preference may differ by event (a tech conference vs. a
 government training). Phase 1 should expose it per event; until the user
 decides, the default stays the provider's.
+
+### D12. Renamed to Dubash (2026-10-16, decided by the project owner)
+
+*Dubash* (from *do-bhashi*, "two-language person") were the interpreters
+of colonial Madras, Bombay and Calcutta: the Indian counterpart of
+*lenguaraz*, the interpreters of the Río de la Plata. The rename is
+complete: product name in every page and doc, binaries (`dubash`,
+`dubash-ingest`, `dubash-bench`), Go module path
+`github.com/UtsavInTech/dubash`, Prometheus prefix `dubash_`, the
+ingest URL variable `DUBASH_URL`, Docker service and volume, and
+localStorage keys (viewers' saved reading settings reset once). NOTICE
+and the README keep crediting Lenguaraz. README.es.md and docs/obs.md
+remain the upstream Spanish guides, renamed only. A synthetic benchmark
+run recognized "Dubash" correctly with and without it as a keyterm, where
+"Lenguaraz" was misheard both ways.
+
+The git remote `origin` still points at the upstream repository; nothing
+has been pushed. The module path assumes a future
+`github.com/UtsavInTech/dubash` repository.

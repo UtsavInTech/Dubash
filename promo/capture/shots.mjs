@@ -10,7 +10,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Keep both rooms "live" without feeding the fake engine enough audio to
 // emit its scripted lines: one second of PCM, then an open, idle pipe.
 const live = ['sala-a', 'sala-b'].map((room, i) => {
-  const p = spawn(`${BIN}/lenguaraz-ingest`, ['-server', BASE, '-room', room, ...(i ? ['-lang', 'es'] : [])], {
+  const p = spawn(`${BIN}/dubash-ingest`, ['-server', BASE, '-room', room, ...(i ? ['-lang', 'es'] : [])], {
     env: { ...process.env, ADMIN_TOKEN: 'secreto' }, stdio: ['pipe', 'ignore', 'ignore'],
   });
   p.stdin.on('error', () => {});
@@ -36,10 +36,10 @@ await o.screenshot({ path: `${OUT}/overlay.png`, omitBackground: true });
 
 const desk = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 // Real audio for the control room: the bundled sample through the operator
-// page for sala-a, and a steady feed from lenguaraz-ingest for sala-b.
+// page for sala-a, and a steady feed from dubash-ingest for sala-b.
 for (const p of live) p.kill();
 await sleep(1000);
-const feed = spawn(`${BIN}/lenguaraz-ingest`, ['-server', BASE, '-room', 'sala-b', '-lang', 'es', '-realtime'], {
+const feed = spawn(`${BIN}/dubash-ingest`, ['-server', BASE, '-room', 'sala-b', '-lang', 'es', '-realtime'], {
   env: { ...process.env, ADMIN_TOKEN: 'secreto' }, stdio: ['pipe', 'ignore', 'ignore'],
 });
 const tone = Buffer.alloc(16000 * 2 * 30);

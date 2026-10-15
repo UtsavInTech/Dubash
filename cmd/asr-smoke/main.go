@@ -20,7 +20,7 @@ import (
 
 	"google.golang.org/genai"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/asr"
 )
 
 func main() {

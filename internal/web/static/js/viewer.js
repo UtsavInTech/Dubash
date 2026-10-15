@@ -97,7 +97,7 @@ let live = false;
 let talk = { n: 0, title: '' }; // the room's current talk, from its status
 
 // ---------- preferences ----------
-const PREFS_KEY = 'lenguaraz.prefs';
+const PREFS_KEY = 'dubash.prefs';
 const prefs = { theme: 'auto', size: 0, spacing: false, orig: false };
 try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch { /* private mode */ }
 
@@ -310,7 +310,7 @@ async function main() {
     return;
   }
   lang = pickLang([room.source, ...room.targets]);
-  document.title = `${room.title} · Lenguaraz`;
+  document.title = `${room.title} · Dubash`;
   $('title').textContent = room.title;
   wirePrefs();
   wireFollow();

@@ -1,4 +1,4 @@
-// Copyright 2026 the lenguaraz India fork contributors. Apache-2.0.
+// Copyright 2026 the Dubash contributors. Apache-2.0.
 
 package bench
 
@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/asr"
 )
 
 // SarvamURL is Sarvam's API host.

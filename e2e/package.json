@@ -1,7 +1,7 @@
 {
-  "name": "lenguaraz-e2e",
+  "name": "dubash-e2e",
   "private": true,
-  "description": "Browser end-to-end suite for Lenguaraz",
+  "description": "Browser end-to-end suite for Dubash",
   "license": "Apache-2.0",
   "scripts": {
     "test": "./run.sh"

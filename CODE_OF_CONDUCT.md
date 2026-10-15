@@ -1,6 +1,6 @@
 # Code of Conduct
 
-Lenguaraz exists to make conferences accessible to more people, and its
+Dubash exists to make conferences accessible to more people, and its
 community should be just as welcoming. We adopt the
 [Contributor Covenant, version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
@@ -14,7 +14,7 @@ project space.
 
 If you experience or witness unacceptable behavior, contact the maintainers
 privately through GitHub (the
-[security advisory form](https://github.com/RchrdHndrcks/lenguaraz/security/advisories/new)
+[security advisory form](https://github.com/UtsavInTech/dubash/security/advisories/new)
 reaches them without making the report public). Reports are handled
 confidentially, and maintainers will act as described in the Contributor
 Covenant's enforcement guidelines.

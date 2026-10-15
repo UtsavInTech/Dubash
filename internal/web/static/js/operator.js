@@ -5,10 +5,10 @@ const NAMES = { en: 'inglés', es: 'español', pt: 'portugués', fr: 'francés',
 let languages = [];
 
 function storedToken() {
-  try { return localStorage.getItem('lenguaraz.token') ?? ''; } catch { return ''; }
+  try { return localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
 }
 function storeToken(t) {
-  try { localStorage.setItem('lenguaraz.token', t); } catch { /* private mode */ }
+  try { localStorage.setItem('dubash.token', t); } catch { /* private mode */ }
 }
 $('token').value = params.get('token') ?? storedToken();
 
@@ -194,7 +194,7 @@ function preview(room) {
     li.append(a, small);
     return li;
   }));
-  $('cli').textContent = `lenguaraz-ingest -server ${location.origin} \\\n  -room ${roomId} -lang ${room.source} -i srt://mixer:9000`;
+  $('cli').textContent = `dubash-ingest -server ${location.origin} \\\n  -room ${roomId} -lang ${room.source} -i srt://mixer:9000`;
 }
 
 // Capture needs AudioWorklet (Chromium) and a secure context (https or

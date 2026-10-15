@@ -1,4 +1,4 @@
-// Copyright 2026 the lenguaraz India fork contributors. Apache-2.0.
+// Copyright 2026 the Dubash contributors. Apache-2.0.
 
 package bench
 
@@ -222,14 +222,14 @@ func TestSarvamRESTAndTranslator(t *testing.T) {
 	defer srv.Close()
 
 	s := SarvamREST{Key: "k", URL: srv.URL}
-	rec, err := s.Recognize(context.Background(), tone(40, 4000), "hi", []string{"Sarvam", "Lenguaraz"})
+	rec, err := s.Recognize(context.Background(), tone(40, 4000), "hi", []string{"Sarvam", "Dubash"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if requests != 2 || rec.Text != "नमस्ते सर्वम नमस्ते सर्वम" {
 		t.Errorf("%d requests, text %q", requests, rec.Text)
 	}
-	if gotLang != "hi-IN" || gotModel != "saaras:v4" || gotKeyterms != `["Sarvam","Lenguaraz"]` {
+	if gotLang != "hi-IN" || gotModel != "saaras:v4" || gotKeyterms != `["Sarvam","Dubash"]` {
 		t.Errorf("lang %q model %q keyterms %q", gotLang, gotModel, gotKeyterms)
 	}
 	if rec.BilledSeconds < 40 || rec.BilledSeconds > 42 {

@@ -1,15 +1,23 @@
-# Lenguaraz
+# Dubash
 
-[![ci](https://github.com/RchrdHndrcks/lenguaraz/actions/workflows/ci.yml/badge.svg)](https://github.com/RchrdHndrcks/lenguaraz/actions/workflows/ci.yml)
+[![ci](https://github.com/UtsavInTech/dubash/actions/workflows/ci.yml/badge.svg)](https://github.com/UtsavInTech/dubash/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Open source real-time captions and translation for conferences.**
-Live audio from each stage becomes subtitles in the original language and in
-Spanish, English, Portuguese, French, German or Italian, for many sessions at
-once. Built for the [Nerdearla](https://nerdear.la) 2026 Vibeathon.
+**Live captions and translation for events in India, on the audience's own phones.**
+The speaker talks; the audience scans a QR code, picks Hindi, Telugu,
+Kannada, Tamil or English, and reads the speaker's words live in that
+language. No app to install.
 
-> *Lenguaraz*: the interpreters who mediated between languages in the history
-> of the Río de la Plata.
+> *Dubash* (from *do-bhashi*, "two-language person"): the interpreters who
+> stood between merchants, courts and traders in Madras, Bombay and Calcutta
+> from the 17th century on.
+
+> **Status: work in progress.** Dubash is a fork of
+> [Lenguaraz](https://github.com/RchrdHndrcks/lenguaraz) (Apache-2.0; see
+> [NOTICE](NOTICE)) being adapted for Indian languages. The sections below
+> still describe the upstream feature set (six European languages, Gemini or
+> local Whisper); the India plan and progress are in [docs/](docs/), starting
+> with [docs/GAP_ANALYSIS.md](docs/GAP_ANALYSIS.md).
 
 📖 **[Leer en español](README.es.md)**: guía de despliegue para organizadores.
 
@@ -19,7 +27,7 @@ once. Built for the [Nerdearla](https://nerdear.la) 2026 Vibeathon.
 
 - One **operator page per room** captures a microphone / line-in from the
   sound desk, or plays an audio file, and streams it to the server.
-- Or skip the browser: **`lenguaraz-ingest`** pulls the stage's own stream
+- Or skip the browser: **`dubash-ingest`** pulls the stage's own stream
   (SRT, RTMP, HLS, a capture card: anything ffmpeg reads) and reconnects on
   its own, so each room runs unattended for the whole event.
 - Each room transcribes with Gemini's live transcription model
@@ -62,13 +70,13 @@ Requirements: Go 1.26+ (or Docker) and a Gemini API key from
 [Google AI Studio](https://aistudio.google.com/apikey).
 
 ```bash
-git clone https://github.com/RchrdHndrcks/lenguaraz && cd lenguaraz
+git clone https://github.com/UtsavInTech/dubash && cd dubash
 export GEMINI_API_KEY=...        # required unless you run fully local
 export ADMIN_TOKEN=change-me     # protects operator and admin pages
-go run ./cmd/lenguaraz           # http://localhost:8080
+go run ./cmd/dubash           # http://localhost:8080
 ```
 
-Try it without a key (scripted captions): `go run ./cmd/lenguaraz -fake`.
+Try it without a key (scripted captions): `go run ./cmd/dubash -fake`.
 
 With Docker: `GEMINI_API_KEY=... ADMIN_TOKEN=... docker compose up --build`.
 Compose refuses to start without `ADMIN_TOKEN`, so a container is never
@@ -133,7 +141,7 @@ rooms:
 Languages are `en`, `es`, `pt`, `fr`, `de` and `it`. The room serves
 `source` plus `targets`. Talks in the same room can switch language: the
 operator picks the language spoken for each transmission (the console's
-**Idioma que se habla** selector, or `lenguaraz-ingest -lang es`), the
+**Idioma que se habla** selector, or `dubash-ingest -lang es`), the
 recognizer is told that language, and the room's other languages become the
 translations. Without a choice, the room keeps its last language.
 
@@ -161,10 +169,10 @@ prompt) and are never translated.
 Every caption line belongs to a talk. A room starts a new talk when:
 
 - the operator starts a transmission with a new title (the console's
-  **Charla** field, or `lenguaraz-ingest -talk "…"`);
+  **Charla** field, or `dubash-ingest -talk "…"`);
 - production clicks **Nueva charla** in the panel, which splits the talk
   without interrupting the audio (for rooms fed around the clock by
-  `lenguaraz-ingest`);
+  `dubash-ingest`);
 - the room was idle for more than 5 minutes, so a reconnecting operator
   continues the talk but the next talk after a break starts afresh.
 
@@ -175,21 +183,21 @@ start at zero, to load over its recording.
 
 ## Captioning a stage stream (no browser)
 
-`lenguaraz-ingest` sends a stage's audio to its room from any machine that
+`dubash-ingest` sends a stage's audio to its room from any machine that
 can see the feed (the streaming PC, the mixer's network, a small VM). It
 decodes with ffmpeg, keeps only the last 5 s while the server is unreachable
 (captions resume live instead of lagging), and reconnects with backoff when
 the network, the server or the source drops.
 
 ```bash
-go install ./cmd/lenguaraz-ingest   # from the repo; lands in $(go env GOPATH)/bin
-export LENGUARAZ_URL=https://subs.example.org ADMIN_TOKEN=change-me
+go install ./cmd/dubash-ingest   # from the repo; lands in $(go env GOPATH)/bin
+export DUBASH_URL=https://subs.example.org ADMIN_TOKEN=change-me
 
-lenguaraz-ingest -room sala-a -i srt://mixer.local:9000          # SRT from the mixer
-lenguaraz-ingest -room sala-b -i rtmp://stream.local/live/sala-b  # RTMP feed
-lenguaraz-ingest -room sala-c -i "$(yt-dlp -g -f bestaudio <url>)" # a YouTube live
-lenguaraz-ingest -room sala-a -lang es -talk "eBPF" -i talk.mp4 -realtime  # a talk in Spanish, from a file
-arecord -f S16_LE -r 16000 -c 1 -t raw | lenguaraz-ingest -room sala-a  # raw PCM on stdin
+dubash-ingest -room sala-a -i srt://mixer.local:9000          # SRT from the mixer
+dubash-ingest -room sala-b -i rtmp://stream.local/live/sala-b  # RTMP feed
+dubash-ingest -room sala-c -i "$(yt-dlp -g -f bestaudio <url>)" # a YouTube live
+dubash-ingest -room sala-a -lang es -talk "eBPF" -i talk.mp4 -realtime  # a talk in Spanish, from a file
+arecord -f S16_LE -r 16000 -c 1 -t raw | dubash-ingest -room sala-a  # raw PCM on stdin
 ```
 
 Run one per room (a systemd unit or a `tmux` pane each); the production
@@ -199,7 +207,7 @@ panel shows every room's state either way.
 
 For venues without a reliable uplink, or events that cannot send audio to a
 cloud provider, both halves of the pipeline can run on your own hardware.
-Lenguaraz speaks the OpenAI-compatible APIs that local model servers expose:
+Dubash speaks the OpenAI-compatible APIs that local model servers expose:
 
 ```bash
 # Transcription: whisper.cpp's server (or Speaches, LocalAI…)
@@ -210,7 +218,7 @@ whisper-server -m models/ggml-large-v3-turbo.bin --host 0.0.0.0 --port 8000 \
 ollama pull gemma3
 
 ASR_URL=http://localhost:8000/v1 TRANSLATE_URL=http://localhost:11434/v1 \
-  ADMIN_TOKEN=change-me go run ./cmd/lenguaraz
+  ADMIN_TOKEN=change-me go run ./cmd/dubash
 ```
 
 With Docker Compose, point them at `http://host.docker.internal:…` instead.
@@ -218,7 +226,7 @@ You can also mix: Gemini for transcription and Gemma for translation, or the
 other way around.
 
 How the local engine works: the OpenAI transcription API takes files, not
-streams, so Lenguaraz cuts the audio at the speaker's pauses (or at the
+streams, so Dubash cuts the audio at the speaker's pauses (or at the
 quietest moment of a long run, at most 10 s), sends each utterance as a WAV,
 and transcribes the utterance in progress every 1.5 s while the server is
 idle, for a live line in the original language. Captions arrive one
@@ -238,16 +246,16 @@ For a large event, scrape `/metrics` with Prometheus
 (`authorization: {credentials: <ADMIN_TOKEN>}`) and alert on, for example:
 
 ```promql
-lenguaraz_room_live == 1 and lenguaraz_room_audio_level_dbfs < -50   # live but silent
-time() - lenguaraz_room_last_text_timestamp_seconds > 30 and lenguaraz_room_live == 1
-rate(lenguaraz_room_errors_total[5m]) > 0
+dubash_room_live == 1 and dubash_room_audio_level_dbfs < -50   # live but silent
+time() - dubash_room_last_text_timestamp_seconds > 30 and dubash_room_live == 1
+rate(dubash_room_errors_total[5m]) > 0
 ```
 
 ## How it works
 
 ```
 operator browser ─┐                            ┌─▶ Gemini Live, or Whisper (local)
-lenguaraz-ingest ─┴─PCM 16 kHz / WebSocket──▶ room      │ interim + final text
+dubash-ingest ─┴─PCM 16 kHz / WebSocket──▶ room      │ interim + final text
                                                │        ▼
                                                │  translate each sentence (Gemini, or Gemma)
                                                ▼        │ one call per language
@@ -256,7 +264,7 @@ audience browsers ◀──── Server-Sent Events ─── hub ◀── sto
 
 - One goroutine pipeline per room; audio is billed once per room and every
   extra language is only a cheap text call.
-- Gemini Live sends the utterance so far every half second. Lenguaraz
+- Gemini Live sends the utterance so far every half second. Dubash
   commits a sentence as soon as later words confirm it, or once the speaker
   pauses after it, so translations do not wait for the utterance to end;
   long run-on sentences are cut at a clause boundary.
@@ -320,8 +328,8 @@ bar) on every theme.
 ```bash
 go test -race ./...
 (cd e2e && npm install && npx playwright install chromium && npm test)  # browser end-to-end suite
-go run ./cmd/lenguaraz -fake &                 # scripted engines
-head -c 960000 /dev/zero | go run ./cmd/lenguaraz-ingest -room sala-a -realtime  # 30 s of fake captions
+go run ./cmd/dubash -fake &                 # scripted engines
+head -c 960000 /dev/zero | go run ./cmd/dubash-ingest -room sala-a -realtime  # 30 s of fake captions
 samples/make-samples.sh          # regenerate the Piper TTS samples (Docker + ffmpeg)
 ffmpeg -loglevel error -i samples/en.wav -f s16le -ac 1 -ar 16000 - | \
   go run ./cmd/asr-smoke -lang en   # check the Live API from the terminal
@@ -333,8 +341,8 @@ the binary):
 
 | Package | Role |
 |---|---|
-| `cmd/lenguaraz` | the server |
-| `cmd/lenguaraz-ingest` | stream a stage's audio into a room without a browser |
+| `cmd/dubash` | the server |
+| `cmd/dubash-ingest` | stream a stage's audio into a room without a browser |
 | `cmd/asr-smoke` | stream PCM from stdin to Gemini Live and print the events |
 | `promo` | the promo video, as code ([Remotion](https://www.remotion.dev)) |
 | `internal/asr` | speech to text: Gemini Live, Whisper-compatible servers, a fake |

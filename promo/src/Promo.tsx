@@ -26,7 +26,7 @@ const Title: React.FC = () => {
     <Scene style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 44, transform: `scale(${0.85 + 0.15 * p})`, opacity: p }}>
         <Logo size={190} />
-        <div style={{ fontSize: 190, fontWeight: 700, letterSpacing: '-.02em' }}>Lenguaraz</div>
+        <div style={{ fontSize: 190, fontWeight: 700, letterSpacing: '-.02em' }}>Dubash</div>
       </div>
       <FadeUp delay={22}><div style={{ fontSize: 50, marginTop: 30, textAlign: 'center' }}>Subtítulos y traducción <b style={{ color: C.yellow }}>en vivo</b> para conferencias.</div></FadeUp>
       <FadeUp delay={40}><div style={{ fontSize: 32, marginTop: 26, color: C.text2 }}>Open source · Apache-2.0</div></FadeUp>
@@ -191,7 +191,7 @@ const Ops: React.FC = () => (
     <Frame src={staticFile('operator.png')} width={820} label="Consola por sala: micrófono, mixer o archivo" delay={8} style={{ position: 'absolute', left: 110, top: 170 }} />
     <Frame src={staticFile('admin.png')} width={820} label="Panel de producción: todas las salas en vivo" delay={35} style={{ position: 'absolute', left: 990, top: 170 }} />
     <FadeUp delay={80} style={{ position: 'absolute', left: 110, top: 820, display: 'flex', alignItems: 'center', gap: 28 }}>
-      <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: 32, background: C.surface, border: `2px solid ${C.border}`, padding: '14px 22px', borderRadius: 8, color: C.yellow }}>lenguaraz-ingest -room sala-a -i srt://mixer:9000</code>
+      <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: 32, background: C.surface, border: `2px solid ${C.border}`, padding: '14px 22px', borderRadius: 8, color: C.yellow }}>dubash-ingest -room sala-a -i srt://mixer:9000</code>
       <span style={{ fontSize: 32, color: C.text2 }}>o sin navegador, desde el stream del escenario</span>
     </FadeUp>
     <FadeUp delay={100} style={{ position: 'absolute', left: 110, top: 930, fontSize: 32, color: C.text2 }}>
@@ -268,11 +268,11 @@ const Outro: React.FC = () => (
     <FadeUp>
       <div style={{ display: 'flex', alignItems: 'center', gap: 34 }}>
         <Logo size={130} />
-        <div style={{ fontSize: 130, fontWeight: 700 }}>Lenguaraz</div>
+        <div style={{ fontSize: 130, fontWeight: 700 }}>Dubash</div>
       </div>
     </FadeUp>
     <FadeUp delay={15}><div style={{ fontSize: 46, marginTop: 30, textAlign: 'center' }}>Que cada charla llegue a todas las personas.</div></FadeUp>
-    <FadeUp delay={30}><div style={{ fontSize: 50, marginTop: 50, fontWeight: 700, color: C.yellow }}>github.com/RchrdHndrcks/lenguaraz</div></FadeUp>
+    <FadeUp delay={30}><div style={{ fontSize: 50, marginTop: 50, fontWeight: 700, color: C.yellow }}>github.com/UtsavInTech/dubash</div></FadeUp>
     <FadeUp delay={45}><div style={{ fontSize: 30, marginTop: 40, color: C.text2 }}>Open source · Apache-2.0 · Hecho para la Vibeathon de Nerdearla 2026</div></FadeUp>
   </Scene>
 );

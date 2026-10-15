@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
-	"github.com/RchrdHndrcks/lenguaraz/internal/config"
-	"github.com/RchrdHndrcks/lenguaraz/internal/store"
-	"github.com/RchrdHndrcks/lenguaraz/internal/translate"
+	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/store"
+	"github.com/UtsavInTech/dubash/internal/translate"
 )
 
 // ringSize is how many recent finals a new viewer receives.

@@ -13,7 +13,7 @@ function poster(room, base) {
     el('img', { src: `/qr/${room.id}`, alt: `Código QR que abre ${url}`, width: 400, height: 400 }),
     el('p', { className: 'poster-cta', textContent: 'Escaneá para leer la charla en tu idioma' }),
     el('p', { className: 'poster-alt', textContent: 'Live captions in your language · Legendas ao vivo no seu idioma' }),
-    el('p', { className: 'poster-url' }, el('span', { textContent: url }), el('strong', { textContent: 'Lenguaraz' })));
+    el('p', { className: 'poster-url' }, el('span', { textContent: url }), el('strong', { textContent: 'Dubash' })));
 }
 
 async function main() {

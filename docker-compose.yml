@@ -1,5 +1,5 @@
 services:
-  lenguaraz:
+  dubash:
     build: .
     ports:
       - "8080:8080"
@@ -21,8 +21,8 @@ services:
       - "host.docker.internal:host-gateway"   # reach model servers on the host
     volumes:
       - ./rooms.yaml:/app/rooms.yaml:ro
-      - lenguaraz-data:/data
+      - dubash-data:/data
     restart: unless-stopped
 
 volumes:
-  lenguaraz-data:
+  dubash-data:

@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
 // Store writes segments under dir/{room}.jsonl.

@@ -1,4 +1,4 @@
-// Copyright 2026 the lenguaraz India fork contributors. Apache-2.0.
+// Copyright 2026 the Dubash contributors. Apache-2.0.
 
 package bench
 
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/asr"
 )
 
 // Recognition is what a recognizer made of one recording.
@@ -35,7 +35,7 @@ type Recognizer interface {
 }
 
 // chunkBytes is 100 ms of audio, the size the operator console and
-// lenguaraz-ingest send.
+// dubash-ingest send.
 const chunkBytes = asr.BytesPerSecond / 10
 
 // EngineRecognizer streams a recording into one of the server's own
@@ -170,7 +170,7 @@ func ScriptedEngine(lang, ref string, seconds float64, mishear map[string]string
 	return asr.Fake{Lines: map[string][]string{lang: lines}, Every: max(every, 0.2)}
 }
 
-// bcp47 maps the codes used across lenguaraz to the Indian-English and
+// bcp47 maps the codes used across dubash to the Indian-English and
 // Indian-language tags Sarvam and most Indian-language APIs expect.
 var bcp47 = map[string]string{
 	"en": "en-IN", "hi": "hi-IN", "te": "te-IN", "kn": "kn-IN", "ta": "ta-IN",

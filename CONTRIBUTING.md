@@ -1,4 +1,4 @@
-# Contributing to Lenguaraz
+# Contributing to Dubash
 
 Thanks for helping make conferences accessible. Issues, pull requests,
 translations of the interface and reports from real events are all welcome,
@@ -17,7 +17,7 @@ in English or Spanish.
 You need Go (the version in `go.mod`). No API key is required for most work:
 
 ```bash
-go run ./cmd/lenguaraz -fake     # scripted transcription and translation
+go run ./cmd/dubash -fake     # scripted transcription and translation
 go test -race ./...
 ```
 
@@ -26,7 +26,7 @@ modules, no build step, embedded in the binary. Reload the page after an
 edit and restart the server.
 
 For frontend changes, run the browser end-to-end suite too: it streams a
-sample from the operator page and from `lenguaraz-ingest` into two rooms
+sample from the operator page and from `dubash-ingest` into two rooms
 and checks the audience page, reading settings, listen mode, projector,
 overlay, production panel, exports and metrics.
 

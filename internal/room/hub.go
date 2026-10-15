@@ -4,7 +4,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
 // Msg is one event sent to viewers: "interim", "final" or "status".

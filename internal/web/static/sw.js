@@ -1,4 +1,4 @@
-// Keeps the OBS overlay loadable while Lenguaraz is down. OBS often starts
+// Keeps the OBS overlay loadable while Dubash is down. OBS often starts
 // before the server, and a page that failed to load never runs the retry in
 // viewer.js. Overlay pages and their assets come from the network when it
 // answers and from the copy viewer.js saved otherwise; live endpoints

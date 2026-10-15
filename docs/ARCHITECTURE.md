@@ -1,12 +1,12 @@
 # Architecture
 
-## Today (upstream lenguaraz, phase 0)
+## Today (inherited from upstream Lenguaraz, phase 0)
 
 One Go process. Everything below runs in it.
 
 ```
 operator browser ─┐   PCM16 16 kHz over WebSocket (/ingest/{room}, ADMIN_TOKEN)
-lenguaraz-ingest ─┘
+dubash-ingest ─┘
         │
         ▼
   room.Run (one per live room)
@@ -62,5 +62,5 @@ Each phase extends the existing packages rather than replacing them:
 | 4 | Events in the database; Redis leases and pub/sub; gateways behind a load balancer; provider failover with breakers; load and failure tests. |
 | 5 | Security review, retention, exports, runbook. |
 
-The benchmark (`cmd/lenguaraz-bench`) sits beside this: it drives the same
+The benchmark (`cmd/dubash-bench`) sits beside this: it drives the same
 `asr.Engine` and `translate.Translator` implementations on recorded audio.

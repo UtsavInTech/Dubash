@@ -1,11 +1,11 @@
 # Subtítulos en OBS
 
 Esta guía arma el circuito completo en una sola máquina: el audio que sale de
-OBS entra a Lenguaraz y los subtítulos vuelven a OBS como una capa sobre el
+OBS entra a Dubash y los subtítulos vuelven a OBS como una capa sobre el
 video, así quedan "quemados" en la transmisión o la grabación.
 
 ```
-OBS (micrófono, video de la charla…) ──audio──▶ lenguaraz-ingest ──▶ Lenguaraz
+OBS (micrófono, video de la charla…) ──audio──▶ dubash-ingest ──▶ Dubash
    ▲                                                                    │
    └────────────── fuente de navegador (overlay transparente) ◀─────────┘
 ```
@@ -13,15 +13,15 @@ OBS (micrófono, video de la charla…) ──audio──▶ lenguaraz-ingest �
 Escrita para OBS 28 o posterior; los nombres de menú van en español y, entre
 paréntesis, en inglés.
 
-## 0. Levantar Lenguaraz
+## 0. Levantar Dubash
 
 ```bash
-git clone https://github.com/RchrdHndrcks/lenguaraz && cd lenguaraz
+git clone https://github.com/UtsavInTech/dubash && cd dubash
 export GEMINI_API_KEY=...   ADMIN_TOKEN=prueba
-go run ./cmd/lenguaraz            # o: docker compose up --build
+go run ./cmd/dubash            # o: docker compose up --build
 ```
 
-Sin API key, `go run ./cmd/lenguaraz -fake` genera subtítulos de mentira: sirve
+Sin API key, `go run ./cmd/dubash -fake` genera subtítulos de mentira: sirve
 para practicar el armado en OBS, no para medir calidad.
 
 ## 1. El overlay: los subtítulos sobre el video
@@ -44,12 +44,12 @@ Se puede ajustar desde la URL:
 | `size` | `0` a `3` (por defecto `0`) | tamaño del texto |
 | `hold` | segundos (por defecto `8`; `0` = nunca) | cuánto queda el texto en pantalla después de que la persona deja de hablar |
 
-El overlay no muestra frases viejas al cargar, se reconecta solo si Lenguaraz
+El overlay no muestra frases viejas al cargar, se reconecta solo si Dubash
 se reinicia, y se borra en las pausas: el stream nunca queda con texto viejo.
 
 La primera vez que cargue bien, el overlay se guarda en OBS. Desde ahí, si
-abrís OBS antes que Lenguaraz, espera al servidor y se conecta solo. La
-primera vez, en cambio, Lenguaraz tiene que estar corriendo: si no lo estaba,
+abrís OBS antes que Dubash, espera al servidor y se conecta solo. La
+primera vez, en cambio, Dubash tiene que estar corriendo: si no lo estaba,
 clic derecho en la fuente → **Actualizar** (*Refresh*). Esto funciona con
 `localhost` o `https`; con otra dirección (`http://192.168…`), actualizá la
 fuente cada vez que el servidor arranque después que OBS.
@@ -59,22 +59,22 @@ fuente cada vez que el servidor arranque después que OBS.
 Docks*) con `http://localhost:8080/admin?token=prueba` o
 `http://localhost:8080/r/sala-a?lang=es`.
 
-## 2. Mandarle el audio a Lenguaraz
+## 2. Mandarle el audio a Dubash
 
 ### Opción A: el audio que sale de OBS (recomendada)
 
-Así Lenguaraz escucha exactamente lo mismo que se transmite, sin cables extra, y
+Así Dubash escucha exactamente lo mismo que se transmite, sin cables extra, y
 la salida de **transmisión** queda libre para YouTube o Twitch: se usa la salida
 de **grabación**.
 
 1. Instalá ffmpeg (`brew install ffmpeg`, `sudo apt install ffmpeg` o
    `winget install ffmpeg`) y el cliente de ingesta:
    ```bash
-   go install ./cmd/lenguaraz-ingest   # desde la carpeta del repo
+   go install ./cmd/dubash-ingest   # desde la carpeta del repo
    ```
-   Si después tu terminal dice `command not found: lenguaraz-ingest`, agregá
+   Si después tu terminal dice `command not found: dubash-ingest`, agregá
    la carpeta de Go al PATH (`export PATH="$PATH:$(go env GOPATH)/bin"`) o
-   corrélo sin instalar: `go run ./cmd/lenguaraz-ingest …`.
+   corrélo sin instalar: `go run ./cmd/dubash-ingest …`.
 2. En OBS: **Ajustes → Salida** (*Settings → Output*), **Modo de salida:
    Avanzado** (*Output Mode: Advanced*), pestaña **Grabación** (*Recording*):
    - **Tipo:** Salida personalizada (FFmpeg) (*Custom Output (FFmpeg)*)
@@ -85,11 +85,11 @@ de **grabación**.
 3. En una terminal, dejá escuchando la sala (con `-lang` el idioma que se
    habla en el escenario):
    ```bash
-   ADMIN_TOKEN=prueba lenguaraz-ingest -room sala-a -lang es \
+   ADMIN_TOKEN=prueba dubash-ingest -room sala-a -lang es \
      -i "udp://127.0.0.1:5000?overrun_nonfatal=1&fifo_size=1000000"
    ```
 4. En OBS: **Iniciar grabación**. En unos segundos aparecen los subtítulos.
-   Al detener la grabación, `lenguaraz-ingest` queda esperando la próxima.
+   Al detener la grabación, `dubash-ingest` queda esperando la próxima.
 
 > Si necesitás grabar en disco al mismo tiempo, usá la opción B o el plugin
 > *Source Record*.
@@ -97,7 +97,7 @@ de **grabación**.
 **Variante SRT** (usa la salida de *transmisión*, así que sirve para probar,
 no para transmitir a la vez): Ajustes → Emisión → Servicio **Personalizado**,
 Servidor `srt://127.0.0.1:9000?mode=caller`; y
-`lenguaraz-ingest -room sala-a -lang es -i "srt://127.0.0.1:9000?mode=listener"`.
+`dubash-ingest -room sala-a -lang es -i "srt://127.0.0.1:9000?mode=listener"`.
 
 ### Opción B: la consola del operador (sin instalar nada)
 
@@ -113,9 +113,9 @@ idioma que se habla y **Transmitir**.
    yt-dlp -f "bv*[height<=720]+ba/b" -o charla.mp4 "<url de la charla>"
    ```
    Agregalo como **Fuentes → + → Multimedia** (*Media Source*). Su audio va a la
-   mezcla de OBS y de ahí a Lenguaraz (opción A).
+   mezcla de OBS y de ahí a Dubash (opción A).
 2. **Cargá el glosario** de la charla en `rooms.yaml` (nombres de personas,
-   productos, siglas) y reiniciá Lenguaraz: mejora mucho los nombres propios.
+   productos, siglas) y reiniciá Dubash: mejora mucho los nombres propios.
 3. **Mirá la latencia** en `http://localhost:8080/admin?token=prueba`. Como
    referencia, el texto en el idioma original aparece mientras la persona
    habla, y la traducción llega uno a tres segundos después de terminada cada
@@ -133,8 +133,8 @@ idioma que se habla y **Transmitir**.
 
 | Síntoma | Causa y solución |
 |---|---|
-| El overlay no muestra nada | ¿Abriste OBS antes que Lenguaraz la primera vez? Actualizá la fuente (clic derecho → Actualizar). ¿Está corriendo la ingesta y dice `ingest connected`? ¿La fuente está arriba de todo? Probá la URL sin `&mode=overlay` en el navegador para ver si llegan subtítulos. |
-| Los subtítulos están en otro idioma | El `-lang` de `lenguaraz-ingest` (o el selector de la consola) tiene que ser el idioma que **se habla**; el `lang` del overlay es el idioma en que se **lee**. |
+| El overlay no muestra nada | ¿Abriste OBS antes que Dubash la primera vez? Actualizá la fuente (clic derecho → Actualizar). ¿Está corriendo la ingesta y dice `ingest connected`? ¿La fuente está arriba de todo? Probá la URL sin `&mode=overlay` en el navegador para ver si llegan subtítulos. |
+| Los subtítulos están en otro idioma | El `-lang` de `dubash-ingest` (o el selector de la consola) tiene que ser el idioma que **se habla**; el `lang` del overlay es el idioma en que se **lee**. |
 | `room busy` en la ingesta | Ya hay otra fuente transmitiendo en esa sala (por ejemplo la consola del operador abierta). Cerrala; la ingesta reintenta sola. |
 | `token rejected` | El `ADMIN_TOKEN` de la ingesta no coincide con el del servidor. |
 | El texto queda cortado o es muy grande | Ajustá `size` y `lines` en la URL, o el ancho de la fuente para que coincida con el lienzo. |

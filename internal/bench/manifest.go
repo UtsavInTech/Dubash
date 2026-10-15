@@ -1,9 +1,9 @@
-// Copyright 2026 the lenguaraz India fork contributors. Apache-2.0.
+// Copyright 2026 the Dubash contributors. Apache-2.0.
 
 // Package bench measures speech recognition and translation providers on
 // recorded audio: word and character error rate, vocabulary term
 // accuracy, numbers and negations, latency and cost, each with and
-// without a vocabulary list. It backs cmd/lenguaraz-bench.
+// without a vocabulary list. It backs cmd/dubash-bench.
 package bench
 
 import (

@@ -1,7 +1,7 @@
 # Sample clips
 
 `en.wav` (~28 s) and `es.wav` (~22 s) are short talk openings used to try
-Lenguaraz without a microphone (the operator page's **sample EN** /
+Dubash without a microphone (the operator page's **sample EN** /
 **sample ES** links) and to check the Live API from the terminal with
 `cmd/asr-smoke`. Both are 16 kHz mono PCM16 WAV, the wire format.
 

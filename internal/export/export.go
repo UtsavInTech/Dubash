@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RchrdHndrcks/lenguaraz/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
 // VTT renders WebVTT in the given language.

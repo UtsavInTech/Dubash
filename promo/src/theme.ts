@@ -1,6 +1,6 @@
 import { continueRender, delayRender, staticFile } from 'remotion';
 
-// Colors and type from Lenguaraz's own stylesheet (internal/web/static/css/app.css).
+// Colors and type from Dubash's own stylesheet (internal/web/static/css/app.css).
 export const C = {
   bg: '#0d0e0e',
   surface: '#1b1c1d',

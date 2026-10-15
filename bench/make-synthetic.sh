@@ -12,13 +12,13 @@ say_wav() { # voice name text
   say -v "$1" -o "$2.wav" --file-format=WAVE --data-format=LEI16@16000 "$3"
 }
 
-say_wav Rishi syn-en-keynote "Good morning everyone. Welcome to the Lenguaraz pilot in Bengaluru. Our partner Sarvam AI will translate this keynote into Hindi, Telugu and Kannada. Registration closes on 15 March, and tickets cost 499 rupees. We will not record this session."
+say_wav Rishi syn-en-keynote "Good morning everyone. Welcome to the Dubash pilot in Bengaluru. Our partner Sarvam AI will translate this keynote into Hindi, Telugu and Kannada. Registration closes on 15 March, and tickets cost 499 rupees. We will not record this session."
 cat > syn-en-keynote.yaml <<'Y'
 lang: en
 vocabulary: demo-india
 tags: [synthetic, names, numbers, negation]
 reference: >-
-  Good morning everyone. Welcome to the Lenguaraz pilot in Bengaluru. Our
+  Good morning everyone. Welcome to the Dubash pilot in Bengaluru. Our
   partner Sarvam AI will translate this keynote into Hindi, Telugu and
   Kannada. Registration closes on 15 March, and tickets cost 499 rupees. We
   will not record this session.
