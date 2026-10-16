@@ -239,6 +239,36 @@ const admStatus = await (await get('/api/admin/status', { headers: { Authorizati
 const hall = admStatus.find((r) => r.id === 'hall-hi');
 check('admin counts Telugu readers', (hall?.listeners?.te ?? 0) >= 1, JSON.stringify(hall?.listeners));
 
+// ---------- Dictation Bank: a live fix reaches readers and the bank (added by the Dubash contributors) ----------
+await op.waitForSelector('#lines p[data-id]', { timeout: 10000 });
+const fixId = await op.$eval('#lines p[data-id]', (p) => p.dataset.id);
+const fixedText = (await op.textContent(`#lines p[data-id="${fixId}"]`)).replace(/\S+\.$/, 'Dubash.');
+await op.fill('#token', TOKEN);
+await op.click(`#lines p[data-id="${fixId}"]`);
+await op.fill('input.fix', fixedText);
+await op.press('input.fix', 'Enter');
+await op.waitForFunction(() => document.getElementById('fixes').textContent.startsWith('Fixed'), null, { timeout: 5000 })
+  .then(async () => check('console fix suggests a bank entry', (await op.textContent('#fixes')).includes('1 word'), await op.textContent('#fixes')))
+  .catch(async () => check('console fix suggests a bank entry', false, await op.textContent('#error')));
+await mob.waitForFunction((t) => [...document.querySelectorAll('#lines p')].some((p) => p.textContent.includes(t)), `[es] ${fixedText}`, { timeout: 5000 })
+  .then(() => check('the fix reaches readers, translated', true))
+  .catch(async () => check('the fix reaches readers, translated', false, await mob.textContent('#lines')));
+const bk = await ctx.newPage();
+bk.on('pageerror', (e) => errors.push(`bank: ${e.message}`));
+bk.on('dialog', (d) => d.accept('e2e'));
+await bk.goto(`${BASE}/bank?token=${TOKEN}`);
+await bk.waitForFunction(() => document.getElementById('suggestions').textContent.includes('Dubash'), null, { timeout: 5000 })
+  .then(() => check('bank lists the suggestion', true)).catch(() => check('bank lists the suggestion', false));
+await bk.click('#suggestions button:has-text("Approve")');
+await bk.waitForFunction(() => document.getElementById('entries').textContent.includes('approved'), null, { timeout: 5000 })
+  .then(() => check('suggestion approved', true)).catch(() => check('suggestion approved', false));
+await bk.click('#events tr:has-text("sala-a") button:has-text("Publish")');
+await bk.waitForFunction(() => document.getElementById('events').textContent.includes('Version 1'), null, { timeout: 5000 })
+  .then(() => check('version published and in force', true))
+  .catch(async () => check('version published and in force', false, await bk.textContent('#events')));
+const st = (await (await get('/api/admin/status', { headers: { Authorization: `Bearer ${TOKEN}` } })).json()).find((r) => r.id === 'sala-a');
+check('the room uses the published version', st.contextVersion === 1 && st.contextEntries === 1, JSON.stringify([st.contextVersion, st.contextEntries]));
+
 // Posters.
 const pst = await ctx.newPage();
 await pst.goto(`${BASE}/posters`);

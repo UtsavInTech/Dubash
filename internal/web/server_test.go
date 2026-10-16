@@ -1,11 +1,14 @@
 package web
 
 import (
+	"path/filepath"
+
 	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/UtsavInTech/dubash/internal/bank"
 	"io"
 	"log/slog"
 	"net/http"
@@ -51,7 +54,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 		}
 		rooms = append(rooms, rm)
 	}
-	srv := httptest.NewServer(New(rooms, st, "secret", log).Handler())
+	site := New(rooms, st, "secret", log)
+	if site.Bank, err = bank.OpenFile(filepath.Join(t.TempDir(), "bank.json")); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(site.Handler())
 	t.Cleanup(srv.Close)
 	return srv
 }

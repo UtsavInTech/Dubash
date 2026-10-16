@@ -307,3 +307,6 @@ td.links div { margin-top: 8px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .header-link { color: inherit; }
 textarea { font: inherit; width: 100%; padding: 8px; border: 2px solid var(--border-strong); }
+.monitor #lines p[data-id] { cursor: pointer; }
+.monitor #lines p[data-id]:hover { text-decoration: underline dotted; }
+input.fix { width: 100%; font: inherit; padding: 4px 6px; border: 2px solid var(--border-strong); }

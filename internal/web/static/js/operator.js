@@ -216,11 +216,23 @@ function preview(room) {
   const events = new EventSource(`/events/${encodeURIComponent(roomId)}`);
   events.addEventListener('final', (e) => {
     const seg = JSON.parse(e.data);
+    if (lines.querySelector(`[data-id="${seg.id}"]`)) return; // replayed
     const p = document.createElement('p');
+    p.dataset.id = seg.id;
     p.textContent = seg.text;
+    p.title = 'Click to fix a word';
+    p.tabIndex = 0;
+    p.onclick = () => fixLine(p);
+    p.onkeydown = (ev) => { if (ev.key === 'Enter') fixLine(p); };
     lines.append(p);
-    while (lines.children.length > 6) lines.firstChild.remove();
+    while (lines.children.length > 8) lines.firstChild.remove();
     $('interim').textContent = '';
+  });
+  // A fix from this or another console replaces the line.
+  events.addEventListener('correction', (e) => {
+    const seg = JSON.parse(e.data);
+    const p = lines.querySelector(`[data-id="${seg.id}"]`);
+    if (p && !p.querySelector('input')) p.textContent = seg.text;
   });
   events.addEventListener('interim', (e) => { $('interim').textContent = JSON.parse(e.data).text; });
   const main = room.targets[0] ?? room.source;
@@ -242,6 +254,48 @@ function preview(room) {
     return li;
   }));
   $('cli').textContent = `dubash-ingest -server ${location.origin} \\\n  -room ${roomId} -lang ${room.source} -i srt://mixer:9000`;
+}
+
+// fixLine edits a committed line in place: Enter saves, Escape cancels.
+// Readers get the fixed line at once, translated again; the replaced words
+// are suggested to the Dictation Bank for approval.
+function fixLine(p) {
+  if (p.querySelector('input')) return;
+  const old = p.textContent;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = old;
+  input.className = 'fix';
+  input.setAttribute('aria-label', 'Fixed line');
+  p.replaceChildren(input);
+  input.focus();
+  const done = (text) => { p.textContent = text; };
+  input.onkeydown = async (ev) => {
+    if (ev.key === 'Escape') return done(old);
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const text = input.value.trim();
+    if (!text || text === old) return done(old);
+    input.disabled = true;
+    try {
+      const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/segments/${p.dataset.id}/correct`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${$('token').value.trim()}` },
+        body: new URLSearchParams({ text }),
+      });
+      if (!res.ok) throw new Error(res.status === 404 ? 'That line is too old to fix here.' : (await res.text()).trim());
+      const out = await res.json();
+      done(text);
+      $('error').textContent = out.warning ?? '';
+      $('fixes').textContent = out.suggested.length
+        ? `Fixed. ${out.suggested.length} word${out.suggested.length > 1 ? 's' : ''} suggested to the Dictation Bank.`
+        : 'Fixed.';
+    } catch (e) {
+      done(old);
+      $('error').textContent = `Could not fix the line: ${e.message}`;
+    }
+  };
+  input.onblur = () => { if (!input.disabled) done(old); };
 }
 
 // Capture needs AudioWorklet (Chromium) and a secure context (https or
