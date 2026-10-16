@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -181,52 +180,6 @@ func Clips(pcm []byte, minLen, maxLen time.Duration) [][]byte {
 		out = append(out, pcm)
 	}
 	return out
-}
-
-// SarvamTranslator translates with Sarvam's POST /translate. The API has
-// no glossary parameter (checked 2026-10-16), so the glossary argument is
-// ignored here: the benchmark shows how often such terms survive anyway,
-// and phase 2 protects them in our own code before calling the API.
-type SarvamTranslator struct {
-	Key    string
-	URL    string // SarvamURL if empty
-	Model  string // sarvam-translate:v1 if empty (22 languages, 2000 characters)
-	Client *http.Client
-}
-
-// Translate implements translate.Translator.
-func (s SarvamTranslator) Translate(ctx context.Context, text, src, dst string, _ []string) (string, error) {
-	model := s.Model
-	if model == "" {
-		model = "sarvam-translate:v1"
-	}
-	base := s.URL
-	if base == "" {
-		base = SarvamURL
-	}
-	body, _ := json.Marshal(map[string]string{
-		"input": text, "source_language_code": BCP47(src), "target_language_code": BCP47(dst), "model": model,
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+"/translate", bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api-subscription-key", s.Key)
-	client := s.Client
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	var out struct {
-		TranslatedText string `json:"translated_text"`
-	}
-	if err := doJSON(client, req, &out); err != nil {
-		return "", fmt.Errorf("sarvam translate %s→%s: %w", src, dst, err)
-	}
-	if strings.TrimSpace(out.TranslatedText) == "" {
-		return "", errors.New("sarvam translate: empty response")
-	}
-	return strings.TrimSpace(out.TranslatedText), nil
 }
 
 // doJSON sends req and decodes a 200 response into out; other statuses

@@ -31,6 +31,12 @@ const (
 // when voice activity detection ends it, which during continuous speech
 // takes 20 s or more. So sentences are committed from the interims as
 // soon as they are stable, and the utterance final only adds what is left.
+//
+// What was already committed is found in each new interim and in the final
+// by aligning the committed words against the text (see alignRest), not by
+// counting words or sentences: recognizers revise their earlier words, and
+// a final often splits sentences differently from its interims (Sarvam's
+// do), which made counting repeat or drop text.
 // An utterance final that ends mid-sentence is carried over and joined to
 // the next utterance's first sentence, but it never waits past the end of
 // that next utterance.
@@ -38,18 +44,35 @@ type assembler struct {
 	carry string // unpunctuated end of a closed utterance, not yet emitted
 	rest  string // uncommitted text of the latest interim
 
-	// What the current utterance has already emitted: complete sentences,
-	// words of the next sentence (cut by the run-on guard), and all words.
-	sentences int
-	partial   int
-	words     int
+	// done are the words the current utterance has already committed, in
+	// order: sentences, run-on cuts, stable words.
+	done []string
+
+	// finalsOnly commits nothing from interims: no sentences, no run-on
+	// cuts. For recognizers whose interims are rougher than their finals.
+	finalsOnly bool
+}
+
+// uncommitted returns what text says after the utterance's committed
+// words.
+func (a *assembler) uncommitted(text string) string {
+	if len(a.done) == 0 {
+		return strings.TrimSpace(text)
+	}
+	return alignRest(text, a.done)
 }
 
 // interim takes the cumulative text of the current utterance. It returns
 // the sentences that became stable as finals, followed by an interim with
 // the text still uncommitted.
 func (a *assembler) interim(text string) []Event {
-	a.rest = dropWords(text, a.words)
+	a.rest = a.uncommitted(text)
+	if a.finalsOnly {
+		if t := strings.TrimSpace(join(a.carry, a.rest)); t != "" {
+			return []Event{{Kind: Interim, Text: t}}
+		}
+		return nil
+	}
 	var out []Event
 	ends := sentenceEnds(a.rest)
 	prev := 0
@@ -58,8 +81,6 @@ func (a *assembler) interim(text string) []Event {
 			break
 		}
 		out = a.commit(out, a.rest[prev:end])
-		a.sentences++
-		a.partial = 0
 		prev = end
 	}
 	a.rest = strings.TrimSpace(a.rest[prev:])
@@ -69,7 +90,6 @@ func (a *assembler) interim(text string) []Event {
 			break
 		}
 		out = a.commit(out, a.rest[:cut])
-		a.partial += len(strings.Fields(a.rest[:cut]))
 		a.rest = strings.TrimSpace(a.rest[cut:])
 	}
 	if t := strings.TrimSpace(join(a.carry, a.rest)); t != "" {
@@ -91,8 +111,6 @@ func (a *assembler) settle() []Event {
 	prev := 0
 	for _, end := range ends {
 		out = a.commit(out, a.rest[prev:end])
-		a.sentences++
-		a.partial = 0
 		prev = end
 	}
 	a.rest = ""
@@ -100,19 +118,9 @@ func (a *assembler) settle() []Event {
 }
 
 // final takes the text of a closed utterance and returns finals for what
-// its interims did not already commit. Committed sentences are skipped by
-// count, since the final text may differ slightly from the interims.
+// its interims did not already commit.
 func (a *assembler) final(text string) []Event {
-	var rest string
-	if ends := sentenceEnds(text); a.sentences == 0 {
-		rest = dropWords(text, a.partial)
-	} else if len(ends) >= a.sentences {
-		rest = dropWords(text[ends[a.sentences-1]:], a.partial)
-	} else {
-		// The final merged sentences the interims had split: fall back to
-		// counting words.
-		rest = dropWords(text, a.words)
-	}
+	rest := a.uncommitted(text)
 	stale := a.carry != "" // already waited for one utterance
 	var out []Event
 	defer a.resetUtterance()
@@ -148,7 +156,6 @@ func (a *assembler) commitWords(n int) []Event {
 	}
 	n = min(n, len(words))
 	out := a.commit(nil, strings.Join(words[:n], " "))
-	a.partial += n
 	a.rest = strings.Join(words[n:], " ")
 	if t := strings.TrimSpace(join(a.carry, a.rest)); t != "" {
 		out = append(out, Event{Kind: Interim, Text: t})
@@ -164,12 +171,12 @@ func (a *assembler) flush() []Event {
 
 func (a *assembler) resetUtterance() {
 	a.rest = ""
-	a.sentences, a.partial, a.words = 0, 0, 0
+	a.done = nil
 }
 
 // commit appends text, preceded by any carried text, as a final.
 func (a *assembler) commit(out []Event, text string) []Event {
-	a.words += len(strings.Fields(text))
+	a.done = append(a.done, strings.Fields(text)...)
 	t := strings.TrimSpace(join(a.carry, strings.TrimSpace(text)))
 	a.carry = ""
 	if t == "" {
@@ -260,17 +267,75 @@ func runeOffset(text string, n int) int {
 	return len(text)
 }
 
-// dropWords returns text without its first n words.
-func dropWords(text string, n int) string {
-	text = strings.TrimLeftFunc(text, unicode.IsSpace)
-	for ; n > 0 && text != ""; n-- {
-		i := strings.IndexFunc(text, unicode.IsSpace)
-		if i < 0 {
-			return ""
-		}
-		text = strings.TrimLeftFunc(text[i:], unicode.IsSpace)
+// alignRest returns what text says after the words already committed.
+// The cut is where text's leading words best match committed, searching a
+// few words either side of their count: first by characters with spaces
+// and punctuation ignored (so "मुख्यवक्ता" matches "मुख्य वक्ता"), then by
+// words, then nearest to the committed count.
+func alignRest(text string, committed []string) string {
+	words := strings.Fields(text)
+	key := func(w string) string {
+		return strings.ToLower(strings.TrimFunc(w, func(r rune) bool { return unicode.IsPunct(r) || isTerminal(r) }))
 	}
-	return text
+	want := make([]string, len(committed))
+	for i, w := range committed {
+		want[i] = key(w)
+	}
+	have := make([]string, len(words))
+	for i, w := range words {
+		have[i] = key(w)
+	}
+	wantChars := []rune(strings.Join(want, ""))
+	abs := func(n int) int { return max(n, -n) }
+	type score struct{ chars, words, off int }
+	less := func(x, y score) bool {
+		if x.chars != y.chars {
+			return x.chars < y.chars
+		}
+		if x.words != y.words {
+			return x.words < y.words
+		}
+		return x.off < y.off
+	}
+	// Recognizers add and drop words as they revise: allow more drift on
+	// a longer committed text.
+	slack := max(4, len(committed)/5)
+	best, bestScore := -1, score{}
+	for k := max(0, len(committed)-slack); k <= min(len(words), len(committed)+slack); k++ {
+		sc := score{
+			chars: editDistance(wantChars, []rune(strings.Join(have[:k], ""))),
+			words: editDistance(want, have[:k]),
+			off:   abs(k - len(committed)),
+		}
+		if best < 0 || less(sc, bestScore) {
+			best, bestScore = k, sc
+		}
+	}
+	if best < 0 {
+		return ""
+	}
+	return strings.Join(words[best:], " ")
+}
+
+// editDistance is the Levenshtein distance between two sequences.
+func editDistance[T comparable](a, b []T) int {
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
 }
 
 // join concatenates transcript chunks, adding a space only when neither

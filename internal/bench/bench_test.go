@@ -189,7 +189,7 @@ func TestKeyterms(t *testing.T) {
 	}
 }
 
-func TestSarvamRESTAndTranslator(t *testing.T) {
+func TestSarvamREST(t *testing.T) {
 	var gotKeyterms, gotLang, gotModel string
 	var requests int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -210,13 +210,6 @@ func TestSarvamRESTAndTranslator(t *testing.T) {
 				t.Errorf("clip is not a valid WAV: %v", err)
 			}
 			json.NewEncoder(w).Encode(map[string]string{"transcript": "नमस्ते सर्वम"})
-		case "/translate":
-			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
-			if body["target_language_code"] != "te-IN" || body["model"] != "sarvam-translate:v1" {
-				t.Errorf("translate body %v", body)
-			}
-			json.NewEncoder(w).Encode(map[string]string{"translated_text": "నమస్తే"})
 		}
 	}))
 	defer srv.Close()
@@ -236,13 +229,6 @@ func TestSarvamRESTAndTranslator(t *testing.T) {
 		t.Errorf("billed %v s for 40 s of audio", rec.BilledSeconds)
 	}
 
-	out, err := SarvamTranslator{Key: "k", URL: srv.URL}.Translate(context.Background(), "नमस्ते", "hi", "te", nil)
-	if err != nil || out != "నమస్తే" {
-		t.Errorf("translate: %q %v", out, err)
-	}
-	if _, err := (SarvamTranslator{Key: "wrong", URL: srv.URL}).Translate(context.Background(), "x", "hi", "te", nil); err == nil || !strings.Contains(err.Error(), "403") {
-		t.Errorf("bad key error: %v", err)
-	}
 }
 
 // TestRunScripted runs the whole harness offline: a scripted recognizer

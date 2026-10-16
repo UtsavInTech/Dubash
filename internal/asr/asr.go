@@ -31,8 +31,15 @@ type Event struct {
 
 // Config describes a room's audio to the engine.
 type Config struct {
-	Lang       string   // ISO 639-1 code: "en", "es", "pt", "fr", "de" or "it"
+	Lang       string   // ISO 639-1 code from internal/lang: "en", "hi", "te"…
 	Vocabulary []string // terms to bias recognition towards
+	// Mode is a provider's recognition style, empty for its default. For
+	// Sarvam, "codemix" writes English words in Latin script inside
+	// Indian-language text.
+	Mode string
+	// Prompt is a short context hint (the event's subject), for providers
+	// that take one.
+	Prompt string
 }
 
 // Engine transcribes a stream of PCM chunks. Run blocks until audio is

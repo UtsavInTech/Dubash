@@ -78,3 +78,25 @@ func TestCommitWords(t *testing.T) {
 		t.Errorf("final %q", f)
 	}
 }
+
+// TestFinalAlignsRewrittenWords: Sarvam's final often rewrites what its
+// partials said; the words committed early must not come back twice.
+func TestFinalAlignsRewrittenWords(t *testing.T) {
+	cases := []struct{ partial, early, final, want string }{
+		// The final writes the number in digits.
+		{"आज का कार्यक्रम सुबह दस बजे शुरू", "आज का कार्यक्रम सुबह दस बजे", "आज का कार्यक्रम सुबह 10 बजे शुरू होगा।", "शुरू होगा।"},
+		// codemix writes an English word in Latin script.
+		{"इस सत्र की रिकॉर्डिंग नहीं", "इस सत्र की रिकॉर्डिंग", "इस सत्र की recording नहीं होगी।", "नहीं होगी।"},
+		// Two words merge into one in the final.
+		{"हमारी मुख्यवक्ता डॉक्टर अनन्या राव", "हमारी मुख्यवक्ता डॉक्टर", "हमारी मुख्य वक्ता डॉक्टर अनन्या राव हैं।", "अनन्या राव हैं।"},
+	}
+	for _, c := range cases {
+		var a assembler
+		a.interim(c.partial)
+		a.commitWords(len(strings.Fields(c.early)))
+		f := texts(a.final(c.final), Final)
+		if len(f) != 1 || f[0] != c.want {
+			t.Errorf("final after %q: %q, want %q", c.early, f, c.want)
+		}
+	}
+}

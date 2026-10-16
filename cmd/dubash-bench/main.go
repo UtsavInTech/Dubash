@@ -29,7 +29,7 @@ import (
 
 func main() {
 	dir := flag.String("dir", "bench", "benchmark directory: recordings/, vocab/, pricing.yaml")
-	asrList := flag.String("asr", "scripted", "recognizers, comma separated: scripted, sarvam, gemini, whisper")
+	asrList := flag.String("asr", "scripted", "recognizers, comma separated: scripted, sarvam (REST), sarvam-stream, gemini, whisper")
 	mtList := flag.String("translate", "fake", "translators, comma separated: fake, sarvam, gemini, chat (empty for none)")
 	to := flag.String("to", "hi,te,kn", "target languages")
 	vocab := flag.String("vocab", "both", "both (baseline and with vocabulary), on or off")
@@ -168,6 +168,17 @@ func recognizers(ctx context.Context, names []string, speed float64) ([]bench.Re
 			}
 			s := bench.SarvamREST{Key: key, Model: os.Getenv("SARVAM_ASR_MODEL"), Mode: os.Getenv("SARVAM_ASR_MODE")}
 			out = append(out, bench.RecognizerFactory{Name: n, Provider: "sarvam", New: func(bench.Recording, []byte) bench.Recognizer { return s }})
+		case "sarvam-stream":
+			key, err := env("SARVAM_API_KEY")
+			if err != nil {
+				return nil, err
+			}
+			e := &asr.Sarvam{Key: key, Model: os.Getenv("SARVAM_ASR_MODEL")}
+			e.Early = os.Getenv("SARVAM_EARLY") == "on"
+			mode := os.Getenv("SARVAM_ASR_MODE")
+			out = append(out, bench.RecognizerFactory{Name: n, Provider: "sarvam", New: func(bench.Recording, []byte) bench.Recognizer {
+				return bench.EngineRecognizer{Label: "sarvam-stream" + suffix(mode), Engine: modeEngine{e, mode}, Speed: speed}
+			}})
 		case "gemini":
 			c, err := gemini(ctx)
 			if err != nil {
@@ -205,7 +216,10 @@ func translators(ctx context.Context, names []string) ([]bench.NamedTranslator, 
 				return nil, err
 			}
 			model := os.Getenv("SARVAM_TRANSLATE_MODEL")
-			out = append(out, bench.NamedTranslator{Name: "sarvam:" + cmpOr(model, "sarvam-translate:v1"), Provider: "sarvam", T: bench.SarvamTranslator{Key: key, Model: model}})
+			// The production translator: keep-as-is terms are masked, so
+			// it honours the glossary and runs with and without it.
+			out = append(out, bench.NamedTranslator{Name: "sarvam:" + cmpOr(model, translate.DefaultSarvamModel), Provider: "sarvam",
+				T: translate.Sarvam{Key: key, Model: model, Limiter: translate.NewRateLimiter(60)}, Glossary: true})
 		case "gemini":
 			c, err := gemini(ctx)
 			if err != nil {
@@ -223,6 +237,24 @@ func translators(ctx context.Context, names []string) ([]bench.NamedTranslator, 
 		}
 	}
 	return out, nil
+}
+
+// modeEngine passes a recognition mode (Sarvam's codemix…) to an engine.
+type modeEngine struct {
+	asr.Engine
+	mode string
+}
+
+func (m modeEngine) Run(ctx context.Context, cfg asr.Config, audio <-chan []byte, events chan<- asr.Event) error {
+	cfg.Mode = m.mode
+	return m.Engine.Run(ctx, cfg, audio, events)
+}
+
+func suffix(mode string) string {
+	if mode == "" {
+		return ""
+	}
+	return ":" + mode
 }
 
 func cmpOr(a, b string) string {
