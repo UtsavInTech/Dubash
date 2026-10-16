@@ -39,24 +39,24 @@ func (s *Server) browserOrigin(r *http.Request) bool {
 func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if !s.browserOrigin(r) {
-		http.Error(w, "This sign-in request came from another website.", 403)
+		http.Error(w, "This sign-in request came from another website.", http.StatusForbidden)
 		return
 	}
 	ip := clientIP(r, s.TrustProxy)
 	if s.access.fails.blocked(ip) {
-		http.Error(w, "Too many attempts. Try again in a few minutes.", 429)
+		http.Error(w, "Too many attempts. Try again in a few minutes.", http.StatusTooManyRequests)
 		return
 	}
 	var input struct {
 		Key string `json:"key"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048)).Decode(&input); err != nil {
-		http.Error(w, "Enter your organiser access key.", 400)
+		http.Error(w, "Enter your organiser access key.", http.StatusBadRequest)
 		return
 	}
 	if s.access.admin != "" && subtle.ConstantTimeCompare([]byte(input.Key), []byte(s.access.admin)) != 1 {
 		s.access.fails.fail(ip)
-		http.Error(w, "That organiser access key was not recognised.", 401)
+		http.Error(w, "That organiser access key was not recognised.", http.StatusUnauthorized)
 		return
 	}
 	expires := strconv.FormatInt(time.Now().Add(8*time.Hour).Unix(), 10)
@@ -65,7 +65,7 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) signOut(w http.ResponseWriter, r *http.Request) {
 	if !s.browserOrigin(r) {
-		http.Error(w, "Invalid origin.", 403)
+		http.Error(w, "Invalid origin.", http.StatusForbidden)
 		return
 	}
 	s.sessionCookie(w, r, "", -1)

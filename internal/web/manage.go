@@ -58,41 +58,41 @@ func (s *Server) createEvent(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, "Please provide valid event details.", 400)
+		http.Error(w, "Please provide valid event details.", http.StatusBadRequest)
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
 	req.Speaker = strings.TrimSpace(req.Speaker)
 	if req.Title == "" || utf8.RuneCountInString(req.Title) > 160 || len(req.ID) > 80 || utf8.RuneCountInString(req.Speaker) > 160 {
-		http.Error(w, "Use an event name of 1–160 characters and a link name of at most 80 characters.", 400)
+		http.Error(w, "Use an event name of 1–160 characters and a link name of at most 80 characters.", http.StatusBadRequest)
 		return
 	}
 	rc := config.Room{ID: req.ID, Title: req.Title, Speaker: req.Speaker, Source: req.Source, Targets: req.Targets, AudiencePIN: req.AudiencePIN, RetentionDays: req.RetentionDays, Exports: req.Exports}
 	data, err := yaml.Marshal(config.Config{Rooms: []config.Room{rc}})
 	if err != nil {
-		http.Error(w, "Invalid event details.", 400)
+		http.Error(w, "Invalid event details.", http.StatusBadRequest)
 		return
 	}
 	cfg, err := config.Parse(data)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	rc = cfg.Rooms[0]
 	s.createMu.Lock()
 	defer s.createMu.Unlock()
 	if _, ok := s.findRoom(rc.ID); ok {
-		http.Error(w, "That event link is already taken. Choose another link name.", 409)
+		http.Error(w, "That event link is already taken. Choose another link name.", http.StatusConflict)
 		return
 	}
 	rm, err := s.CreateEvent(r.Context(), rc)
 	if err != nil {
 		s.log.Error("create event", "err", err)
-		http.Error(w, "The event could not be saved. Please try again.", 500)
+		http.Error(w, "The event could not be saved. Please try again.", http.StatusInternalServerError)
 		return
 	}
 	if rm == nil || rm.Config().ID != rc.ID {
-		http.Error(w, "Invalid event factory result.", 500)
+		http.Error(w, "Invalid event factory result.", http.StatusInternalServerError)
 		return
 	}
 	s.roomsMu.Lock()

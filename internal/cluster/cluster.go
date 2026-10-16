@@ -163,7 +163,7 @@ func (c *Coordinator) Handler(local http.Handler) http.Handler {
 			ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 			defer cancel()
 			if _, err := c.Redis.Do(ctx, "PING"); err != nil {
-				http.Error(w, "coordination unavailable", 503)
+				http.Error(w, "coordination unavailable", http.StatusServiceUnavailable)
 				return
 			}
 			local.ServeHTTP(w, r)
@@ -197,17 +197,19 @@ func (c *Coordinator) Handler(local http.Handler) http.Handler {
 		}
 		owner, err := c.owner(r.Context(), id)
 		if err != nil || owner == c.URL {
-			http.Error(w, "room owner unavailable", 503)
+			http.Error(w, "room owner unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		target, err := url.Parse(owner)
 		if err != nil {
-			http.Error(w, "invalid room owner", 503)
+			http.Error(w, "invalid room owner", http.StatusServiceUnavailable)
 			return
 		}
 		proxy := httputil.NewSingleHostReverseProxy(target)
 		proxy.FlushInterval = -1
-		proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) { http.Error(w, "room owner unavailable", 503) }
+		proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+			http.Error(w, "room owner unavailable", http.StatusServiceUnavailable)
+		}
 		proxy.ServeHTTP(w, r)
 	})
 }
@@ -233,7 +235,7 @@ func (c *Coordinator) catalog(w http.ResponseWriter, r *http.Request) {
 	for _, rc := range c.Rooms {
 		owner, err := c.owner(ctx, rc.ID)
 		if err != nil {
-			http.Error(w, "room catalog temporarily unavailable", 503)
+			http.Error(w, "room catalog temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		owners[owner] = true
@@ -243,14 +245,14 @@ func (c *Coordinator) catalog(w http.ResponseWriter, r *http.Request) {
 	for owner := range owners {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, owner+r.URL.RequestURI(), nil)
 		if err != nil {
-			http.Error(w, "invalid owner", 503)
+			http.Error(w, "invalid owner", http.StatusServiceUnavailable)
 			return
 		}
 		req.Header = r.Header.Clone()
 		req.Header.Set("X-Dubash-Catalog", "local")
 		resp, err := client.Do(req)
 		if err != nil {
-			http.Error(w, "room owner unavailable", 503)
+			http.Error(w, "room owner unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		var batch []json.RawMessage
@@ -262,7 +264,7 @@ func (c *Coordinator) catalog(w http.ResponseWriter, r *http.Request) {
 		err = json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&batch)
 		resp.Body.Close()
 		if err != nil {
-			http.Error(w, "invalid room catalog", 503)
+			http.Error(w, "invalid room catalog", http.StatusServiceUnavailable)
 			return
 		}
 		entries = append(entries, batch...)
@@ -273,7 +275,7 @@ func (c *Coordinator) catalog(w http.ResponseWriter, r *http.Request) {
 			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(entry, &identity); err != nil {
-			http.Error(w, "invalid room identity", 503)
+			http.Error(w, "invalid room identity", http.StatusServiceUnavailable)
 			return
 		}
 		byID[identity.ID] = entry
