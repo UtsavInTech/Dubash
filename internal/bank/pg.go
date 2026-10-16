@@ -16,6 +16,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/UtsavInTech/dubash/internal/script"
 )
 
 //go:embed migrations/*.sql
@@ -272,9 +274,10 @@ func (s *PGStore) SaveVersion(ctx context.Context, v Version, actor string) (Ver
 	v.CreatedBy = actor
 	v.CreatedAt = v.CreatedAt.UTC().Truncate(time.Microsecond)
 	entries, _ := json.Marshal(v.Entries)
-	err = tx.QueryRow(ctx, `INSERT INTO event_context_versions (event_id, number, created_at, created_by, note, speaker, hash, entries)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		v.Event, v.Number, v.CreatedAt, v.CreatedBy, v.Note, v.Speaker, v.Hash, entries).Scan(&v.ID)
+	chunks, _ := json.Marshal(orEmptyChunks(v.Script))
+	err = tx.QueryRow(ctx, `INSERT INTO event_context_versions (event_id, number, created_at, created_by, note, speaker, hash, entries, script)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+		v.Event, v.Number, v.CreatedAt, v.CreatedBy, v.Note, v.Speaker, v.Hash, entries, chunks).Scan(&v.ID)
 	if err != nil {
 		return Version{}, fmt.Errorf("bank: %w", err)
 	}
@@ -289,9 +292,9 @@ const versionColumns = `id, event_id, number, created_at, created_by, note, spea
 func scanVersion(row pgx.Row, withEntries bool) (Version, error) {
 	var v Version
 	dest := []any{&v.ID, &v.Event, &v.Number, &v.CreatedAt, &v.CreatedBy, &v.Note, &v.Speaker, &v.Hash}
-	var entries []byte
+	var entries, chunks []byte
 	if withEntries {
-		dest = append(dest, &entries)
+		dest = append(dest, &entries, &chunks)
 	}
 	if err := row.Scan(dest...); err != nil {
 		return Version{}, err
@@ -301,13 +304,26 @@ func scanVersion(row pgx.Row, withEntries bool) (Version, error) {
 		if err := json.Unmarshal(entries, &v.Entries); err != nil {
 			return Version{}, err
 		}
+		if err := json.Unmarshal(chunks, &v.Script); err != nil {
+			return Version{}, err
+		}
+		if len(v.Script) == 0 {
+			v.Script = nil
+		}
 	}
 	return v, nil
 }
 
+func orEmptyChunks(c []script.Chunk) []script.Chunk {
+	if c == nil {
+		return []script.Chunk{}
+	}
+	return c
+}
+
 // Version implements Store.
 func (s *PGStore) Version(ctx context.Context, id int64) (Version, error) {
-	v, err := scanVersion(s.db.QueryRow(ctx, `SELECT `+versionColumns+`, entries FROM event_context_versions WHERE id = $1`, id), true)
+	v, err := scanVersion(s.db.QueryRow(ctx, `SELECT `+versionColumns+`, entries, script FROM event_context_versions WHERE id = $1`, id), true)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Version{}, ErrNotFound
 	}
@@ -358,7 +374,7 @@ func (s *PGStore) Pin(ctx context.Context, event string, id int64, actor string)
 
 // Pinned implements Store.
 func (s *PGStore) Pinned(ctx context.Context, event string) (Version, bool, error) {
-	v, err := scanVersion(s.db.QueryRow(ctx, `SELECT `+versionColumns+`, entries FROM event_context_versions
+	v, err := scanVersion(s.db.QueryRow(ctx, `SELECT `+versionColumns+`, entries, script FROM event_context_versions
 		WHERE id = (SELECT version_id FROM event_context_pins WHERE event_id = $1)`, event), true)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Version{}, false, nil

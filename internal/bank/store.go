@@ -65,6 +65,13 @@ type Store interface {
 	// Pinned returns the event's pinned version, if any.
 	Pinned(ctx context.Context, event string) (Version, bool, error)
 
+	// SaveScript stores a script: a new one when sc.ID is empty, else a new
+	// version (a retired one stays, no longer used in new versions).
+	SaveScript(ctx context.Context, sc Script, actor string) (Script, error)
+	// Scripts returns the current version of each script of an event, in
+	// upload order.
+	Scripts(ctx context.Context, event string) ([]Script, error)
+
 	SaveCorrection(ctx context.Context, c Correction) (Correction, error)
 	Corrections(ctx context.Context, event string) ([]Correction, error)
 
@@ -104,6 +111,7 @@ type fileData struct {
 	Versions    []Version        `json:"versions"`
 	Pins        map[string]int64 `json:"pins"`
 	Corrections []Correction     `json:"corrections"`
+	Scripts     []Script         `json:"scripts"`
 	Audit       []AuditEntry     `json:"audit"`
 }
 

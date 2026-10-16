@@ -281,3 +281,57 @@ func TestFileStorePersists(t *testing.T) {
 		t.Fatalf("reopened: %+v %v", got, err)
 	}
 }
+
+func TestScriptsContract(t *testing.T) {
+	stores(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		if _, err := s.SaveScript(ctx, Script{Event: "hall", Name: "day 1", Text: "  "}, "admin"); err == nil {
+			t.Fatal("saved an empty script")
+		}
+		a, err := s.SaveScript(ctx, Script{Event: "hall", Name: "day 1", Text: "नमस्ते दोस्तों।\r\n\r\nआज कथा है।"}, "admin")
+		if err != nil || a.Version != 1 || a.Status != ScriptActive || a.Text != "नमस्ते दोस्तों।\n\nआज कथा है।" {
+			t.Fatalf("save: %+v %v", a, err)
+		}
+		b, _ := s.SaveScript(ctx, Script{Event: "hall", Name: "day 2", Text: "कल सुंदरकांड होगा।"}, "admin")
+		s.SaveScript(ctx, Script{Event: "other", Name: "x", Text: "y"}, "admin")
+		a.Status = ScriptRetired
+		if a2, err := s.SaveScript(ctx, a, "admin"); err != nil || a2.Version != 2 {
+			t.Fatalf("retire: %+v %v", a2, err)
+		}
+		list, err := s.Scripts(ctx, "hall")
+		if err != nil || len(list) != 2 || list[0].ID != a.ID || list[0].Status != ScriptRetired || list[1].ID != b.ID {
+			t.Fatalf("scripts %+v %v", list, err)
+		}
+		// A version carries the active scripts' chunks, and keeps them.
+		v := NewVersion(nil, "hall", "", "admin", "")
+		v.AttachScripts(list)
+		if len(v.Script) != 1 || v.Script[0].Doc != "day 2" {
+			t.Fatalf("attached %+v", v.Script)
+		}
+		saved, _ := s.SaveVersion(ctx, v, "admin")
+		got, err := s.Version(ctx, saved.ID)
+		if err != nil || len(got.Script) != 1 || got.Script[0].Text != "कल सुंदरकांड होगा।" || got.Hash != v.Hash {
+			t.Fatalf("version script %+v %v", got, err)
+		}
+		if c := NewContext(got, nil); c.Index.Len() != 1 {
+			t.Fatalf("context index %d", c.Index.Len())
+		}
+	})
+}
+
+func TestScriptSuggestions(t *testing.T) {
+	s, _ := OpenFile(filepath.Join(t.TempDir(), "b.json"))
+	ctx := context.Background()
+	s.SaveEntry(ctx, Entry{Scope: ScopeOrg, Term: "Dubash", Status: Approved}, "admin")
+	got, err := ScriptSuggestions(ctx, s, Script{Name: "x", Text: "Dubash app पर Sarvam AI और Sarvam AI से कथा। भंडारा भंडारा।"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var terms []string
+	for _, c := range got {
+		terms = append(terms, c.Term)
+	}
+	if slices.Contains(terms, "Dubash") || !slices.Contains(terms, "Sarvam AI") || !slices.Contains(terms, "भंडारा") {
+		t.Fatalf("suggestions %q", terms)
+	}
+}

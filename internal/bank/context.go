@@ -5,6 +5,7 @@ package bank
 import (
 	"slices"
 
+	"github.com/UtsavInTech/dubash/internal/script"
 	"github.com/UtsavInTech/dubash/internal/translate"
 )
 
@@ -16,12 +17,14 @@ type Context struct {
 	Version Version
 	// Base holds rooms.yaml's glossary terms: hints, and never translated.
 	Base []string
+	// Index searches the version's script chunks (empty without a script).
+	Index *script.Index
 }
 
 // NewContext readies v, adding base terms (rooms.yaml) that the bank does
-// not cover.
+// not cover, and indexing its script.
 func NewContext(v Version, base []string) *Context {
-	return &Context{Version: v, Base: base}
+	return &Context{Version: v, Base: base, Index: script.NewIndex(v.Script)}
 }
 
 // Entries are the version's entries, event entries first.

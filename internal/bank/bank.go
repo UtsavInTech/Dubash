@@ -28,6 +28,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/UtsavInTech/dubash/internal/lang"
+	"github.com/UtsavInTech/dubash/internal/script"
 )
 
 // Scope says whom an entry belongs to.
@@ -267,6 +268,9 @@ type Version struct {
 	Note      string    `json:"note,omitempty"`
 	Speaker   string    `json:"speaker,omitempty"`
 	Entries   []Entry   `json:"entries"`
+	// Script holds the chunks of the event's active scripts when the
+	// version was compiled (see AttachScripts).
+	Script []script.Chunk `json:"script,omitempty"`
 	// Hash identifies the content, so pinning an identical snapshot twice
 	// is visible.
 	Hash string `json:"hash"`
