@@ -53,8 +53,9 @@ type Server struct {
 	// Prices and Meter estimate each room's cost for the panel and the
 	// metrics. Meter counts a chat translator's tokens; without one,
 	// translation is priced per character.
-	Prices Prices
-	Meter  *translate.Meter
+	Prices          Prices
+	Meter           *translate.Meter
+	CorrectionMeter *translate.Meter
 
 	// drainGrace is how long a room's pipeline may keep finishing after
 	// its operator disconnects before it is cancelled.
@@ -193,7 +194,7 @@ func (s *Server) statuses() []room.Status {
 	for _, rm := range s.order {
 		out = append(out, rm.Status())
 	}
-	costs(out, s.Prices, s.Meter)
+	costs(out, s.Prices, s.Meter, s.CorrectionMeter)
 	return out
 }
 

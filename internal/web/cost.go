@@ -26,9 +26,17 @@ var SarvamPrices = Prices{SpeechPerHour: 30, PromptPerM: 15, CompletionPerM: 60,
 
 func round2(x float64) float64 { return math.Round(x*100) / 100 }
 
+func tokenCost(p Prices, m *translate.Meter) float64 {
+	if m == nil {
+		return 0
+	}
+	return float64(m.PromptTokens.Load())*p.PromptPerM/1e6 + float64(m.CompletionTokens.Load())*p.CompletionPerM/1e6
+}
+
 // costs fills in each status's Cost. With a token meter, the tokens'
-// price is shared out over rooms and languages by characters translated.
-func costs(statuses []room.Status, p Prices, m *translate.Meter) {
+// price is shared out over rooms and languages by characters translated;
+// the correction model's (corr) over rooms by audio recognized.
+func costs(statuses []room.Status, p Prices, m, corr *translate.Meter) {
 	var chars int64
 	for _, st := range statuses {
 		for _, n := range st.TranslatedChars {
@@ -39,14 +47,23 @@ func costs(statuses []room.Status, p Prices, m *translate.Meter) {
 	if m != nil {
 		perChar = 0
 		if chars > 0 {
-			tokens := float64(m.PromptTokens.Load())*p.PromptPerM/1e6 + float64(m.CompletionTokens.Load())*p.CompletionPerM/1e6
-			perChar = tokens / float64(chars)
+			perChar = tokenCost(p, m) / float64(chars)
 		}
+	}
+	var audio float64
+	for _, st := range statuses {
+		audio += st.AudioTotalSeconds
+	}
+	perSecond := 0.0
+	if audio > 0 {
+		perSecond = tokenCost(p, corr) / audio
 	}
 	for i := range statuses {
 		st := &statuses[i]
 		c := &room.Cost{Speech: round2(st.AudioTotalSeconds / 3600 * p.SpeechPerHour), Translation: map[string]float64{}}
-		total := c.Speech
+		corrCost := st.AudioTotalSeconds * perSecond
+		c.Correction = round2(corrCost)
+		total := c.Speech + corrCost
 		for l, n := range st.TranslatedChars {
 			c.Translation[l] = round2(float64(n) * perChar)
 			total += float64(n) * perChar

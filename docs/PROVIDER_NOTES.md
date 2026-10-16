@@ -130,6 +130,18 @@ Errors seen in the output, all of the kind the Dictation Bank targets:
 - Bundeli-heavy lines translated loosely;
 - "दोस्तों" given a feminine plural in te and kn (earlier test).
 
+### Chat model as translator and corrector, tested live (2026-10-16)
+
+`sarvam-105b` at `https://api.sarvam.ai/v1/chat/completions`
+(`api-subscription-key` header, `reasoning_effort: null`, temperature 0):
+
+- Five Hindi lines into Telugu or Kannada: 0.3-0.5 s, about 121 prompt and 55 completion tokens; word senses right (शर्त = bet), approved terms kept. `sarvam-105b-conversations` was as fast but got one sense wrong.
+- Live, 60 s of Hindi read in English, Telugu, Kannada, with a published bank of 4 terms and the correction stage on: translations p50 0.25-0.5 s, p95 0.6-1.4 s; correction p50 0 s (the model runs only when a line may hold an error), p95 0.2 s; **₹43.8 per audio hour in all: ₹30 recognition, ₹0.6 correction, ₹4.2 per language** (Sarvam Translate: about ₹100 per language).
+- Failure modes seen and handled: answers without the line numbers (parsed positionally); dialect lines only re-spelled in the target script (detected, retried with context, then Sarvam Translate); a phrase repeated in a loop (detected, redone); lines merged (asked for exactly N lines).
+- Style: natural spoken style with English loanwords (Telugu "ఫ్రెండ్స్", "ప్రోగ్రామ్"), colloquial Tamil ("இன்னைக்கு"). A formal register per event is a possible setting.
+- As corrector, on the brief's adversarial cases it fixed a script-only name (धीरेंदर किशन → धीरेंद्र कृष्ण) and, without the safety rules, would have changed a number to match the script, dropped a नहीं, translated a word, inserted an unspoken script word, and swapped a correctly heard word for a bank term (राम जी → राम कथा); the rules (`internal/correct`) refuse each of these.
+- Rehearsal (recognition sent faster than real time to the realtime endpoint) works.
+
 ### Not yet verified (needs a test)
 
 - Accuracy on real Indian conference speech, Hinglish especially (benchmark pending recordings).

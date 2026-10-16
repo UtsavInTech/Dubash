@@ -64,7 +64,8 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		log.Warn("ADMIN_TOKEN is not set: anyone can stream audio and see the admin panel")
 	}
 
-	corrector, err := newCorrector(log, fake, meter)
+	corrMeter := &translate.Meter{}
+	corrector, err := newCorrector(log, fake, corrMeter)
 	if err != nil {
 		return err
 	}
@@ -80,7 +81,7 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 
 	site := web.New(rs, st, token, log)
 	site.PublicURL = os.Getenv("PUBLIC_URL")
-	site.Meter = meter
+	site.Meter, site.CorrectionMeter = meter, corrMeter
 	if !fake {
 		site.Prices = web.SarvamPrices
 	}

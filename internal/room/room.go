@@ -166,6 +166,7 @@ type Status struct {
 // Cost estimates what a room has cost so far, in rupees.
 type Cost struct {
 	Speech      float64            `json:"speech"`
+	Correction  float64            `json:"correction"`
 	Translation map[string]float64 `json:"translation"`
 	Total       float64            `json:"total"`
 	// PerHour is Total over the audio hours recognized.

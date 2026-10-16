@@ -17,7 +17,7 @@ func TestCosts(t *testing.T) {
 		{AudioTotalSeconds: 1800, TranslatedChars: map[string]int64{"kn": 25000}},
 	}
 	// Per character (the translate API): ₹20 per 10,000.
-	costs(st, SarvamPrices, nil)
+	costs(st, SarvamPrices, nil, nil)
 	if c := st[0].Cost; c.Speech != 30 || c.Translation["te"] != 100 || c.Total != 130 || c.PerHour != 130 {
 		t.Errorf("per character: %+v", c)
 	}
@@ -26,14 +26,17 @@ func TestCosts(t *testing.T) {
 	m := &translate.Meter{}
 	m.PromptTokens.Store(1_000_000)
 	m.CompletionTokens.Store(250_000)
-	costs(st, SarvamPrices, m)
-	if c := st[0].Cost; c.Translation["te"] != 20 || c.Total != 50 {
+	// Correction: 0.6M prompt tokens = ₹9, shared 2:1 by audio.
+	corr := &translate.Meter{}
+	corr.PromptTokens.Store(600_000)
+	costs(st, SarvamPrices, m, corr)
+	if c := st[0].Cost; c.Translation["te"] != 20 || c.Correction != 6 || c.Total != 56 {
 		t.Errorf("per token, room 1: %+v", c)
 	}
-	if c := st[1].Cost; c.Speech != 15 || c.Translation["kn"] != 10 || c.PerHour != 50 {
+	if c := st[1].Cost; c.Speech != 15 || c.Translation["kn"] != 10 || c.Correction != 3 || c.PerHour != 56 {
 		t.Errorf("per token, room 2: %+v", c)
 	}
-	costs(st, Prices{}, nil)
+	costs(st, Prices{}, nil, nil)
 	if st[0].Cost.Total != 0 {
 		t.Errorf("free engines cost %v", st[0].Cost.Total)
 	}

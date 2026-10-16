@@ -499,18 +499,24 @@ func wordDiff(a, b []string) [][4]int {
 }
 
 // relevant picks the bank entries worth showing the model for a line: the
-// ones with a spelling or mis-hearing near some words of it. At most 30.
+// ones the line may have got wrong, a known mis-hearing present or a
+// spelling nearly (not exactly) there. A term heard right needs nothing.
+// At most 30.
 func relevant(text string, entries []bank.Entry) []bank.Entry {
 	var out []bank.Entry
 	for _, e := range entries {
 		if e.Status != bank.Approved {
 			continue
 		}
-		for _, s := range append(e.Spellings(), e.Misheard...) {
-			if containsWords(text, s) || nearSpan(text, s) != "" || sharesWord(text, s) {
-				out = append(out, e)
-				break
-			}
+		hit := false
+		for _, m := range e.Misheard {
+			hit = hit || containsWords(text, m)
+		}
+		for _, s := range e.Spellings() {
+			hit = hit || !containsWords(text, s) && (nearSpan(text, s) != "" || nearWords(text, s))
+		}
+		if hit {
+			out = append(out, e)
 		}
 		if len(out) == 30 {
 			break
@@ -519,16 +525,23 @@ func relevant(text string, entries []bank.Entry) []bank.Entry {
 	return out
 }
 
-func sharesWord(text, s string) bool {
-	ws := map[string]bool{}
-	for _, w := range script.Words(text) {
-		if len([]rune(w)) >= 3 {
-			ws[w] = true
+// nearWords reports a line with a word of s that sounds like a word of
+// the line without being it (a looser test than nearSpan, for longer
+// terms the model may resolve): "धीरेंदर" for "धीरेंद्र".
+func nearWords(text, s string) bool {
+	for _, a := range script.Words(s) {
+		pa := phonetic(a)
+		if len(pa) < 3 {
+			continue
 		}
-	}
-	for _, w := range script.Words(s) {
-		if ws[w] {
-			return true
+		for _, b := range script.Words(text) {
+			if a == b || !sameScript(a, b) {
+				continue
+			}
+			// Spelled differently, sounding alike: "खता" for "कथा".
+			if d := editDistance(pa, phonetic(b)); d <= max(1, len(pa)/3) {
+				return true
+			}
 		}
 	}
 	return false

@@ -86,7 +86,7 @@ function costCell(s) {
   if (!c || !c.total) return el('td', { className: 'num', textContent: '—' });
   const per = Object.entries(c.translation ?? {}).map(([l, v]) => `${l.toUpperCase()} ₹${v.toFixed(2)}`);
   return el('td', { className: 'num' }, `₹${c.total.toFixed(2)}`,
-    el('span', { className: 'sub', textContent: `speech ₹${c.speech.toFixed(2)}${per.length ? ` · ${per.join(' · ')}` : ''}` }),
+    el('span', { className: 'sub', textContent: `speech ₹${c.speech.toFixed(2)}${c.correction ? ` · correction ₹${c.correction.toFixed(2)}` : ''}${per.length ? ` · ${per.join(' · ')}` : ''}` }),
     el('span', { className: 'sub', textContent: c.perHour ? `₹${c.perHour.toFixed(0)} per hour` : '' }));
 }
 

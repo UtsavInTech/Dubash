@@ -135,7 +135,7 @@ func TestModelDeadline(t *testing.T) {
 	m := &fakeModel{edits: []Edit{{From: "a", To: "b"}}, wait: time.Second}
 	c := &Corrector{Model: m, Deadline: 50 * time.Millisecond}
 	start := time.Now()
-	r := c.Correct(context.Background(), Input{Lang: "en", Text: "a line", Entries: []bank.Entry{entry("line up")}})
+	r := c.Correct(context.Background(), Input{Lang: "en", Text: "a line", Entries: []bank.Entry{entry("lime")}})
 	if !r.TimedOut || r.Text != "a line" || time.Since(start) > 500*time.Millisecond {
 		t.Fatalf("result %+v after %v", r, time.Since(start))
 	}
