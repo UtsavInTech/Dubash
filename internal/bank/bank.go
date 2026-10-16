@@ -246,7 +246,13 @@ func Resolve(entries []Entry, event, speaker string) []Entry {
 		if a.Scope.rank() != b.Scope.rank() {
 			return b.Scope.rank() - a.Scope.rank()
 		}
-		return strings.Compare(Fold(a.Term), Fold(b.Term))
+		if c := strings.Compare(Fold(a.Term), Fold(b.Term)); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.Lang, b.Lang); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
 	})
 	return out
 }
