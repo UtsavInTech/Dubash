@@ -69,6 +69,9 @@ type Corrector struct {
 	// Deadline bounds the model (default 800 ms); the deterministic rules
 	// always run.
 	Deadline time.Duration
+	// Lexicon lists real words: the near-miss rule never turns one into a
+	// bank term.
+	Lexicon Lexicon
 }
 
 // maxEdits bounds the edits in one line.
@@ -119,6 +122,9 @@ func (c *Corrector) Correct(ctx context.Context, in Input) Result {
 				continue
 			}
 			if from := nearSpan(res.Text, sp); from != "" {
+				if c != nil && c.Lexicon.realWords(in.Lang, from) {
+					continue // a real word, not a near miss: "ब्रह्म" is not "ब्रह्मा"
+				}
 				apply(Edit{From: from, To: e.Term, Rule: "fuzzy", Entry: e.ID})
 				break
 			}

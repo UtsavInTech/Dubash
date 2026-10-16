@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -151,18 +152,33 @@ func newCorrector(log *slog.Logger, fake bool, meter *translate.Meter) (*correct
 		}
 		deadline = time.Duration(ms) * time.Millisecond
 	}
+	// LEXICON lists word files (JSON lines with term and language, such as
+	// the Indian discourse vocabulary bank's vocabulary.jsonl): real words
+	// the near-miss rule must not "correct" into bank terms.
+	var lex correct.Lexicon
+	if v := os.Getenv("LEXICON"); v != "" && mode != "off" {
+		var err error
+		if lex, err = correct.LoadLexicon(strings.Split(v, ",")...); err != nil {
+			return nil, err
+		}
+		n := 0
+		for _, ws := range lex {
+			n += len(ws)
+		}
+		log.Info("lexicon loaded", "words", n, "languages", len(lex))
+	}
 	switch mode {
 	case "off":
 		return nil, nil
 	case "rules":
-		return &correct.Corrector{}, nil
+		return &correct.Corrector{Lexicon: lex}, nil
 	case "model":
 		if key == "" {
 			return nil, errors.New("CORRECTION=model needs SARVAM_API_KEY")
 		}
 		chat := translate.SarvamChat{Key: key, Model: os.Getenv("SARVAM_CHAT_MODEL"), Meter: meter, Log: log}
 		log.Info("correction stage: dictation bank rules and model", "deadline", deadline)
-		return &correct.Corrector{Model: correct.LLM{Chat: chat}, Deadline: deadline}, nil
+		return &correct.Corrector{Model: correct.LLM{Chat: chat}, Deadline: deadline, Lexicon: lex}, nil
 	}
 	return nil, fmt.Errorf("unknown CORRECTION %q (off, rules, model)", mode)
 }

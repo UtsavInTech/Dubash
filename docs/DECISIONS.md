@@ -318,3 +318,27 @@ end-of-speech window to 300 ms (SARVAM_SILENCE_MS) gives finals at the
 speaker's short pauses at no accuracy cost. A speaker who does not pause
 for 300 ms (18 s at the start of the darbar) still arrives in one piece;
 SARVAM_EARLY=on trades accuracy for those cases.
+
+### D33. The Indian discourse vocabulary bank: a lexicon, not hints
+
+Reviewed 2026-10-16 (indian_word_bank.zip, version 1.0; checksums OK):
+2,050 headwords in nine languages (Hindi 900, Kannada 450, seven others
+100 each), 54% everyday words, from Wiktionary (CC BY-SA 4.0) and Alar
+(ODbL), with English meanings, source evidence, 14 ambiguity cases, 12
+speaker profiles marked as editorial guesses. No native-speaker review,
+no speech benchmark (it says so).
+
+- As recognition hints it adds little: of 525 distinct words in our four
+  Shastri clips, 119 are in it, and the devotional ones (ब्रह्मा, हनुमान,
+  भगवान, गुरु) are words Sarvam already recognized; Sarvam takes 50 hints.
+- As a translation glossary it adds little: 9 concepts are linked across
+  Hindi, Telugu and Kannada, all ordinary words.
+- It is useful as a lexicon of real words. Its case A03 (ब्रह्म, Brahman,
+  is not ब्रह्मा, Brahma) exposed a risk in our near-miss rule, one vowel
+  sign apart. With LEXICON set, the rule never turns a real word into a
+  bank term; a mis-hearing the bank lists still applies.
+
+Its data stays outside the repository (share-alike licences); the server
+reads it at start. Its devotional terms and meanings could seed
+suggested bank entries for religious events; not done without the
+owner's choice of which.

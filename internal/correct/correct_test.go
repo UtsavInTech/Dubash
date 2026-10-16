@@ -5,6 +5,7 @@ package correct
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -195,5 +196,36 @@ func TestNoInsertionsOrDeletions(t *testing.T) {
 		if _, ok := Apply(c.text, c.e); ok != c.ok {
 			t.Errorf("Apply(%q, %+v) ok=%v", c.text, c.e, ok)
 		}
+	}
+}
+
+// TestLexiconStopsNearMisses: "ब्रह्म" (Brahman) is one vowel sign from
+// the bank term "ब्रह्मा" (Brahma) but a different word; with a lexicon
+// that knows it, the near-miss rule leaves it.
+func TestLexiconStopsNearMisses(t *testing.T) {
+	path := t.TempDir() + "/lex.jsonl"
+	os.WriteFile(path, []byte(`{"term":"ब्रह्म","language":"hi"}
+{"term":"ब्रह्मा","language":"hi"}
+not json
+{"term":"ಬ್ರಹ್ಮ","language":"kn"}
+`), 0o644)
+	lex, err := LoadLexicon(path)
+	if err != nil || !lex.Has("hi", "ब्रह्म") || lex.Has("hi", "ಬ್ರಹ್ಮ") {
+		t.Fatalf("lexicon %v %v", lex, err)
+	}
+	in := Input{Lang: "hi", Text: "वह ब्रह्म है।", Entries: []bank.Entry{entry("ब्रह्मा", func(e *bank.Entry) { e.Lang = "hi" })}}
+	if r := (&Corrector{}).Correct(context.Background(), in); r.Text != "वह ब्रह्मा है।" {
+		t.Fatalf("without a lexicon the near miss applies (the risk): %q", r.Text)
+	}
+	if r := (&Corrector{Lexicon: lex}).Correct(context.Background(), in); r.Text != "वह ब्रह्म है।" {
+		t.Fatalf("with a lexicon: %q", r.Text)
+	}
+	// A mis-hearing the bank lists still applies.
+	in.Entries[0].Misheard = []string{"ब्रह्म"}
+	if r := (&Corrector{Lexicon: lex}).Correct(context.Background(), in); r.Text != "वह ब्रह्मा है।" {
+		t.Fatalf("listed mis-hearing: %q", r.Text)
+	}
+	if _, err := LoadLexicon(t.TempDir() + "/missing"); err == nil {
+		t.Error("a missing file was accepted")
 	}
 }
