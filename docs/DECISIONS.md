@@ -207,3 +207,94 @@ close code 4001, which `dubash-ingest` and the console treat as final
 The E2E suite runs with `e2e/rooms.yaml`, the upstream Spanish/English
 rooms plus a Hindi room, so the upstream checks keep testing what they
 were written for.
+
+## Phases 2 and 3 (2026-10-16)
+
+### D23. Owner decisions recorded
+
+- Commit as the speaker speaks, in natural phrases, never mid-phrase
+  ("भाई, तुम क्या | कर रहे हो" is wrong). See D27.
+- Readers select a language and then see the history in it (D25).
+- Cost target: ₹30-40 for an event hour (D26).
+- Accuracy matters more than structure (D28, D29).
+
+### D24. Dictation Bank storage: PostgreSQL, or a file
+
+The bank (entries, versions, pins, corrections, scripts, audit log) is
+in PostgreSQL when DATABASE_URL is set, else in data/bank.json. Both
+pass one contract suite (`bank.TestStoreContract`,
+`bank.TestScriptsContract`; PostgreSQL with DUBASH_TEST_PG). Migrations
+are embedded and applied under an advisory lock. Events stay in
+rooms.yaml until phase 4. pgx (MIT) is the driver.
+
+The live path never reads the store: a room holds the pinned version as
+an immutable in-memory context, so a database outage cannot stop an
+event; a new version applies from the next committed line, never
+mid-line, and recognition hints at the next session (Sarvam fixes
+keyterms per connection).
+
+### D25. History for every reader
+
+When a reader opens a language, the recent lines (up to 50) without a
+translation into it are translated in batches of up to 20, once per
+language; later readers get them from the replay. Replaces D17's open
+question.
+
+### D26. Translate with Sarvam's chat model by default
+
+Sarvam Translate costs ₹20 per 10,000 characters, about ₹100 per
+language per caption hour. Sarvam's chat model (sarvam-105b, reasoning
+off) is priced per token. Measured live (60 s of Hindi read in English,
+Telugu, Kannada): ₹39.5 per hour in all, ₹30 of it recognition, and
+translations in 0.4-0.6 s instead of 1-2 s. Quality on our lines was at
+least as good (correct word senses, approved terms kept), except that
+it sometimes only re-spelled dialect lines in the target script; such
+lines (detected by mapping the scripts' parallel Unicode layout back to
+Devanagari) are retried with their neighbours, then sent to Sarvam
+Translate. The admin panel shows the cost so far and per hour.
+
+### D27. Phrase boundaries for every cut
+
+Early commits (long utterances) and the run-on guard cut only after
+sentence punctuation, a clause-final verb or auxiliary, or before a
+clause-opening conjunction; never after a pronoun, question word,
+postposition, vocative or article, nor before a trailing tag (यार, जी).
+With no phrase end, the guard waits for twice its length limit. The
+upstream test for the old cut-anywhere behaviour was changed to match.
+
+### D28. Correction is bounded and every edit is checked
+
+Order: the bank's known mis-hearings; near misses of bank terms (same
+script, one letter in five); then, with evidence, Sarvam's chat model
+given the matching bank entries, the aligned script passage (only when
+the aligner is confident) and the previous lines, within 800 ms. Every
+edit, rule or model, must: exist in the line as whole words; keep
+numbers and negations; not insert unspoken words nor drop spoken ones;
+write only words from the bank or the script passage. Ambiguous entries
+(ordinary words) need the script. On a live adversarial probe the model
+proposed harmful edits in half the lines (a number "fixed" to match the
+script, a dropped नहीं, a translated word, an inserted script word); the
+rules refused all of them. The model alone is not trusted.
+
+### D29. Scripts: text, .md and .docx; PDF later
+
+PDF text extraction in Indian scripts is often broken by font encodings
+and would need OCR; admins paste text or upload .docx for now. Scripts
+are data: stored, chunked, searched, shown to the correction model as a
+passage, never followed as instructions and never shown to readers.
+
+### D30. Wispr Flow
+
+Wispr Flow has no public speech-to-text API (its developer page
+mentions one without details and points to sales, 2026-10-16). Its
+accuracy comes from a strong model plus context (a personal dictionary,
+what is being said), which is what the Dictation Bank, the script and
+the correction stage provide here.
+
+### D31. Interface strings checked against Sarvam
+
+Our Hindi, Telugu, Kannada and Tamil interface text was compared with
+Sarvam's translation of the English (translate.TestProbeUIStrings). The
+meaning matched everywhere; Sarvam used more English loanwords
+(ईवेंट, సెట్టింగ్స్) where ours use native words (कार्यक्रम,
+సెట్టింగ్‌లు), and it made two errors of its own. We keep ours.

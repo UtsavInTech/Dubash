@@ -14,7 +14,9 @@ dubash-ingest (mixer feed)    ─┘
                  │ interim (provisional) / final (committed) events
                  │ assembler: sentence commit, alignment against committed words
                  ▼
-    commit: segment id, stream epoch ──▶ hub "final" (all readers, SSE id)
+    correction (≤ 800 ms): bank mis-hearings, near misses, then the chat
+      model with bank entries + aligned script passage; every edit checked
+    commit: segment id, stream epoch, raw + fixes ──▶ hub "final" (SSE id)
          └─▶ per-language worker (only languages being read, plus always_translate)
                 batch the lines waiting ──▶ translate.Translator / Batcher
                 (Sarvam: keep-as-is terms masked, shared rate limiter)
@@ -28,6 +30,14 @@ dubash-ingest (mixer feed)    ─┘
         ▼
   phones (/r/{room}), stage screen, OBS overlay
 ```
+
+Control plane: the Dictation Bank (`internal/bank`, PostgreSQL or a
+file): versioned entries with scopes and approval, scripts, corrections,
+audit; publishing compiles an immutable version (resolved entries +
+script chunks) that the room holds in memory with a BM25 index and an
+aligner. The `/bank` page manages it, takes scripts and runs
+rehearsals; the speaker console fixes lines live (a correction revision,
+re-translated, suggested to the bank).
 
 Configuration: `rooms.yaml` (source, targets, glossary, speaker,
 asr_mode, always_translate), env vars for providers and keys, one
