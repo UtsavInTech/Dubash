@@ -175,9 +175,12 @@ func TestAssemblerRunOnGuard(t *testing.T) {
 	}
 }
 
+// Modified by the Dubash contributors: without a phrase end the guard
+// now waits for twice maxPending before cutting at a space (60 words used
+// to be enough), so that lines are not cut mid-phrase.
 func TestAssemblerRunOnGuardWithoutCommas(t *testing.T) {
 	var a assembler
-	long := strings.TrimSpace(strings.Repeat("word ", 60))
+	long := strings.TrimSpace(strings.Repeat("word ", 100))
 	finals := texts(a.interim(long), Final)
 	if len(finals) != 1 || len(finals[0]) > maxPending || !strings.HasPrefix(long, finals[0]) {
 		t.Fatalf("finals %q", finals)

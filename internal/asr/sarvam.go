@@ -77,9 +77,9 @@ type Sarvam struct {
 	// Early commits text from partial transcripts before the utterance
 	// ends: sentences that partials already punctuate, and, in utterances
 	// longer than EarlyAfter (default 8 s), words unchanged for StableAfter
-	// (default 1.5 s). Lines then reach the audience sooner during long
-	// utterances, but partials are rougher than finals: on our Hindi clips
-	// word error rose by 1 to 13 points. Off by default.
+	// (default 1.5 s), up to the last phrase boundary among them (see
+	// phrase.go). Lines then reach the audience sooner during long
+	// utterances, but partials are rougher than finals.
 	Early                   bool
 	StableAfter, EarlyAfter time.Duration
 	Log                     *slog.Logger
@@ -545,8 +545,12 @@ func (r *sarvamRun) early(now time.Time) {
 	}
 	committed := len(r.asm.done)
 	total := len(r.stable.words)
-	n := min(r.stable.prefix(now, after), total-tailWords) - committed
-	if n >= minEarlyWords {
+	limit := min(r.stable.prefix(now, after), total-tailWords)
+	// Cut only where a phrase ends, as the speaker would pause: never
+	// mid-phrase ("भाई, तुम क्या | कर रहे हो").
+	end := lastPhraseEnd(r.stable.words, committed+minEarlyWords, limit)
+	n := end - committed
+	if end > 0 && n >= minEarlyWords {
 		// Placed where the last committed word was first heard: commit
 		// lag then reads from that moment.
 		at := r.stable.at[committed+n-1]

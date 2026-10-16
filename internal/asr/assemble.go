@@ -250,10 +250,22 @@ func runOnCut(text string, anywhere bool) int {
 			best = i + 1
 		}
 	}
-	if best > 0 || !anywhere {
+	if best > 0 {
 		return best
 	}
-	return strings.LastIndexByte(text[:runeOffset(text, maxPending)], ' ')
+	// No clause punctuation: cut at the last phrase end within maxPending
+	// characters (after a clause-final verb, before a conjunction), never
+	// mid-phrase. Only a speaker who runs on for twice that without one is
+	// cut at a space.
+	head := text[:runeOffset(text, maxPending)]
+	words := strings.Fields(text)
+	if n := lastPhraseEnd(words, minClauseWords, len(strings.Fields(head))); n > 0 && len(words)-n >= minWordsAfter {
+		return len(strings.Join(words[:n], " "))
+	}
+	if !anywhere || utf8.RuneCountInString(text) <= 2*maxPending {
+		return 0
+	}
+	return strings.LastIndexByte(head, ' ')
 }
 
 // runeOffset is the byte offset of the n-th rune of text, or len(text).

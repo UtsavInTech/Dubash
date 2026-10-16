@@ -49,8 +49,9 @@ func TestRunOnCutCountsCharacters(t *testing.T) {
 	if f := texts(a.interim(text), Final); len(f) != 0 {
 		t.Errorf("cut a %d-character run: %q", utf8.RuneCountInString(text), f)
 	}
-	// Past maxPending characters it is cut at a space, on a rune boundary.
-	long := strings.TrimSpace(strings.Repeat("कथा ", 60))
+	// With no phrase end at all, past twice maxPending characters it is
+	// cut at a space, on a rune boundary.
+	long := strings.TrimSpace(strings.Repeat("कथा ", 120))
 	var b assembler
 	f := texts(b.interim(long), Final)
 	if len(f) == 0 || !utf8.ValidString(f[0]) || utf8.RuneCountInString(f[0]) > maxPending {

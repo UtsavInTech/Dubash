@@ -238,7 +238,9 @@ func TestSarvamCommitsStableWordsEarly(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := texts(evs, Final)
-	if len(f) != 2 || f[0] != "सोई ब्रह्मा जी प्रकट हो गए रुकियो रुकियो" || f[1] != "हनुमान जी बोले एक तरफ हो जाओ।" {
+	// The stable words run to "रुकियो रुकियो", but the phrase ends after
+	// the verb "गए": the cut is there.
+	if len(f) != 2 || f[0] != "सोई ब्रह्मा जी प्रकट हो गए" || f[1] != "रुकियो रुकियो हनुमान जी बोले एक तरफ हो जाओ।" {
 		t.Errorf("finals %q", f)
 	}
 }
