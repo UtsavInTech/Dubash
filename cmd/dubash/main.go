@@ -53,7 +53,7 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		return err
 	}
 
-	engine, translator, err := backends(ctx, log, fake)
+	engine, translator, meter, err := backends(ctx, log, fake)
 	if err != nil {
 		return err
 	}
@@ -75,6 +75,10 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 
 	site := web.New(rs, st, token, log)
 	site.PublicURL = os.Getenv("PUBLIC_URL")
+	site.Meter = meter
+	if !fake {
+		site.Prices = web.SarvamPrices
+	}
 	if site.Bank, err = openBank(ctx, log, dataDir); err != nil {
 		return err
 	}
@@ -139,13 +143,15 @@ func openBank(ctx context.Context, log *slog.Logger, dataDir string) (bank.Store
 //
 // ASR_PROVIDER and TRANSLATE_PROVIDER choose explicitly: sarvam, gemini,
 // or whisper / chat (the OpenAI-compatible servers at ASR_URL and
-// TRANSLATE_URL). Without them: Sarvam when SARVAM_API_KEY is set (the
+// TRANSLATE_URL); TRANSLATE_PROVIDER=sarvam-translate uses Sarvam's
+// translate API instead of its chat model. Without them: Sarvam when SARVAM_API_KEY is set (the
 // default for Indian languages), else the URL servers when their URLs are
 // set, else Gemini.
-func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, translate.Translator, error) {
+func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, translate.Translator, *translate.Meter, error) {
 	if fake {
-		return asr.Fake{}, translate.Fake{}, nil
+		return asr.Fake{}, translate.Fake{}, nil, nil
 	}
+	var meter *translate.Meter
 	var client *genai.Client
 	gemini := func() (*genai.Client, error) {
 		if client != nil {
@@ -179,7 +185,7 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 	switch p := pick(os.Getenv("ASR_PROVIDER"), os.Getenv("ASR_URL")); p {
 	case "sarvam":
 		if sarvamKey == "" {
-			return nil, nil, errors.New("ASR_PROVIDER=sarvam needs SARVAM_API_KEY")
+			return nil, nil, nil, errors.New("ASR_PROVIDER=sarvam needs SARVAM_API_KEY")
 		}
 		engine = &asr.Sarvam{
 			Key: sarvamKey, Model: os.Getenv("SARVAM_ASR_MODEL"), Log: log,
@@ -193,38 +199,51 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 	case "gemini":
 		c, err := gemini()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		engine = &asr.Gemini{Client: c, Model: os.Getenv("ASR_MODEL"), Log: log}
 	default:
-		return nil, nil, fmt.Errorf("unknown ASR_PROVIDER %q (sarvam, gemini, whisper)", p)
+		return nil, nil, nil, fmt.Errorf("unknown ASR_PROVIDER %q (sarvam, gemini, whisper)", p)
 	}
 
 	var translator translate.Translator
 	switch p := pick(os.Getenv("TRANSLATE_PROVIDER"), os.Getenv("TRANSLATE_URL")); p {
-	case "sarvam":
+	case "sarvam", "sarvam-translate":
 		if sarvamKey == "" {
-			return nil, nil, errors.New("TRANSLATE_PROVIDER=sarvam needs SARVAM_API_KEY")
+			return nil, nil, nil, fmt.Errorf("TRANSLATE_PROVIDER=%s needs SARVAM_API_KEY", p)
 		}
 		rpm := 60 // Sarvam's Starter plan; Pro 200, Business 1000 (per account)
 		if v := os.Getenv("SARVAM_TRANSLATE_RPM"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				return nil, nil, fmt.Errorf("SARVAM_TRANSLATE_RPM: %w", err)
+				return nil, nil, nil, fmt.Errorf("SARVAM_TRANSLATE_RPM: %w", err)
 			}
 			rpm = n
 		}
-		translator = translate.Sarvam{Key: sarvamKey, Model: os.Getenv("SARVAM_TRANSLATE_MODEL"), Limiter: translate.NewRateLimiter(rpm)}
+		if p == "sarvam" {
+			// Sarvam's chat model: priced per token, about a fiftieth of the
+			// translate API per caption hour, and faster.
+			meter = &translate.Meter{}
+			limiter := translate.NewRateLimiter(rpm)
+			translator = translate.SarvamChat{
+				Key: sarvamKey, Model: os.Getenv("SARVAM_CHAT_MODEL"), Limiter: limiter, Meter: meter, Log: log,
+				// The few lines the model only transliterates (dialect it
+				// does not understand) go to the translate API.
+				Fallback: translate.Sarvam{Key: sarvamKey, Model: os.Getenv("SARVAM_TRANSLATE_MODEL"), Limiter: limiter},
+			}
+		} else {
+			translator = translate.Sarvam{Key: sarvamKey, Model: os.Getenv("SARVAM_TRANSLATE_MODEL"), Limiter: translate.NewRateLimiter(rpm)}
+		}
 	case "url", "chat":
 		translator = translate.Chat{URL: os.Getenv("TRANSLATE_URL"), Model: os.Getenv("TRANSLATE_MODEL"), Key: os.Getenv("TRANSLATE_API_KEY")}
 	case "gemini":
 		c, err := gemini()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		translator = translate.Hedged{Inner: translate.Gemini{Client: c, Model: os.Getenv("TRANSLATE_MODEL")}}
 	default:
-		return nil, nil, fmt.Errorf("unknown TRANSLATE_PROVIDER %q (sarvam, gemini, chat)", p)
+		return nil, nil, nil, fmt.Errorf("unknown TRANSLATE_PROVIDER %q (sarvam, gemini, chat)", p)
 	}
-	return engine, translator, nil
+	return engine, translator, meter, nil
 }

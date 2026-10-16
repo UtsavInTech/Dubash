@@ -220,6 +220,13 @@ func translators(ctx context.Context, names []string) ([]bench.NamedTranslator, 
 			// it honours the glossary and runs with and without it.
 			out = append(out, bench.NamedTranslator{Name: "sarvam:" + cmpOr(model, translate.DefaultSarvamModel), Provider: "sarvam",
 				T: translate.Sarvam{Key: key, Model: model, Limiter: translate.NewRateLimiter(60)}, Glossary: true})
+		case "sarvam-chat":
+			key, err := env("SARVAM_API_KEY")
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, bench.NamedTranslator{Name: "sarvam-chat:" + cmpOr(os.Getenv("SARVAM_CHAT_MODEL"), translate.DefaultSarvamChatModel), Provider: "sarvam-chat",
+				T: translate.SarvamChat{Key: key, Model: os.Getenv("SARVAM_CHAT_MODEL")}, Glossary: true})
 		case "gemini":
 			c, err := gemini(ctx)
 			if err != nil {

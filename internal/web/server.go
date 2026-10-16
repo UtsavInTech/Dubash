@@ -28,6 +28,7 @@ import (
 	"github.com/UtsavInTech/dubash/internal/export"
 	"github.com/UtsavInTech/dubash/internal/room"
 	"github.com/UtsavInTech/dubash/internal/store"
+	"github.com/UtsavInTech/dubash/internal/translate"
 )
 
 //go:embed static
@@ -48,6 +49,12 @@ type Server struct {
 
 	// Bank is the Dictation Bank store; nil disables its pages and API.
 	Bank bank.Store
+
+	// Prices and Meter estimate each room's cost for the panel and the
+	// metrics. Meter counts a chat translator's tokens; without one,
+	// translation is priced per character.
+	Prices Prices
+	Meter  *translate.Meter
 
 	// drainGrace is how long a room's pipeline may keep finishing after
 	// its operator disconnects before it is cancelled.
@@ -177,11 +184,17 @@ func (s *Server) listRooms(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) adminStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, s.statuses())
+}
+
+// statuses snapshots every room, with its cost.
+func (s *Server) statuses() []room.Status {
 	out := make([]room.Status, 0, len(s.order))
 	for _, rm := range s.order {
 		out = append(out, rm.Status())
 	}
-	writeJSON(w, out)
+	costs(out, s.Prices, s.Meter)
+	return out
 }
 
 // baseURL is where the audience reaches this server: PublicURL, or the

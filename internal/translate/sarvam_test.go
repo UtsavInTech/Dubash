@@ -169,3 +169,130 @@ func TestApprovedTranslations(t *testing.T) {
 		}
 	}
 }
+
+func TestSarvamChat(t *testing.T) {
+	var sys, user string
+	reply := "1. ఒకటి\n2) రెండు Dubash\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Model           string              `json:"model"`
+			ReasoningEffort *string             `json:"reasoning_effort"`
+			Messages        []map[string]string `json:"messages"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if body.Model != "sarvam-105b" || body.ReasoningEffort != nil || r.Header.Get("api-subscription-key") != "k" {
+			t.Errorf("request %+v", body)
+		}
+		sys, user = body.Messages[0]["content"], body.Messages[1]["content"]
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{"content": reply}}},
+			"usage":   map[string]int{"prompt_tokens": 120, "completion_tokens": 20},
+		})
+	}))
+	defer srv.Close()
+	m := &Meter{}
+	s := SarvamChat{Key: "k", URL: srv.URL, Meter: m}
+	got, err := s.TranslateBatch(context.Background(), []string{"एक", "दो  Dubash"}, "hi", "te",
+		Glossary{Keep: []string{"Dubash"}, Terms: []Term{{Source: []string{"राम कथा"}, Target: "రామకథ"}}})
+	if err != nil || strings.Join(got, "|") != "ఒకటి|రెండు Dubash" {
+		t.Fatalf("got %q %v", got, err)
+	}
+	if user != "2 lines; answer with exactly 2 numbered lines.\n1. एक\n2. दो Dubash\n" || !strings.Contains(sys, "from Hindi into Telugu") || !strings.Contains(sys, "राम कथा → రామకథ") || !strings.Contains(sys, "never invent names") {
+		t.Errorf("prompt:\n%s\n%s", sys, user)
+	}
+	if m.PromptTokens.Load() != 120 || m.CompletionTokens.Load() != 20 || m.Requests.Load() != 1 {
+		t.Errorf("meter %d %d", m.PromptTokens.Load(), m.CompletionTokens.Load())
+	}
+	reply = "1. ఒకటి\n" // a line went missing
+	if _, err := s.TranslateBatch(context.Background(), []string{"एक", "दो"}, "hi", "te", Glossary{}); err != ErrBatchSplit {
+		t.Fatalf("missing line: %v", err)
+	}
+	reply = "1. ఒకటి\n"
+	if out, err := s.Translate(context.Background(), "एक", "hi", "te", Glossary{}); err != nil || out != "ఒకటి" {
+		t.Fatalf("single: %q %v", out, err)
+	}
+}
+
+func TestParseNumbered(t *testing.T) {
+	for _, c := range []struct {
+		out  string
+		n    int
+		want string
+		ok   bool
+	}{
+		{"1. a\n2. b", 2, "a|b", true},
+		{"2. b\n1) a\n", 2, "a|b", true},
+		{"a\nb", 2, "a|b", true},                    // numbers dropped
+		{"Then he said.", 1, "Then he said.", true}, // a single line, unnumbered
+		{"1. a", 2, "", false},
+		{"a\nb\nc", 2, "", false},
+	} {
+		got, ok := parseNumbered(c.out, c.n)
+		if ok != c.ok || ok && strings.Join(got, "|") != c.want {
+			t.Errorf("parseNumbered(%q, %d) = %q %v", c.out, c.n, got, ok)
+		}
+	}
+}
+
+func TestTransliterated(t *testing.T) {
+	hi := "हनुमान जी बोले एक तरफ हो जाओ शर्त में तुम ना फसो बीच में।"
+	for _, c := range []struct {
+		out  string
+		want bool
+	}{
+		{"హనుమాన్ జీ బోలే, ఏక్ తీర్ హో జావో, శరత్ మే తుమ్ నా ఫసో, బీచ్ మే.", true},         // Telugu script, Hindi words
+		{"ಹನುಮಾನ್ ಜಿ ಭೋಲೇ ಏಕ್ ತೀಂತ್ ಹೋ ಜಾವೋ ಶರತ್ ಮೇ ತುಮ್ ನಾ ಫಸೋ ಬೀಚ್ ಮೇ.", true},           // Kannada script, Hindi words
+		{"హనుమాన్ జీ అన్నారు, ఒక పక్కకు తప్పుకోండి, మీరు పందెంలో ఇరుక్కోకండి.", false},     // translated
+		{"ಹನುಮಂತರು, \"ಒಂದು ಕಡೆ ಸರಿಯಿರಿ, ಪಣಕ್ಕೆ ಬೀಳಬೇಡಿ, ಮಧ್ಯದಲ್ಲಿ ಇರಬೇಡಿ\" ಎಂದರು.", false}, // translated
+		{"Hanuman ji said, step aside.", false},
+	} {
+		if got := Transliterated(hi, c.out); got != c.want {
+			t.Errorf("Transliterated(…, %q) = %v", c.out, got)
+		}
+	}
+	if Transliterated("डॉ अनन्या राव", "డాక్టర్ అనన్య రావు") {
+		t.Error("a short line of names was judged")
+	}
+}
+
+// TestSarvamChatRetriesTransliteration: a line only written out in the
+// target script is retried with context, then given to the fallback.
+func TestSarvamChatRetriesTransliteration(t *testing.T) {
+	hi := "हनुमान जी बोले एक तरफ हो जाओ"
+	translit := "హనుమాన్ జీ బోలే ఏక్ తరఫ్ హో జావో"
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		json.NewEncoder(w).Encode(map[string]any{"choices": []map[string]any{{"message": map[string]string{"content": "1. " + translit}}}})
+	}))
+	defer srv.Close()
+	fb := &countingTr{out: "హనుమాన్ అన్నారు, పక్కకు జరుగు"}
+	s := SarvamChat{Key: "k", URL: srv.URL, Fallback: fb}
+	out, err := s.Translate(context.Background(), hi, "hi", "te", Glossary{})
+	if err != nil || out != fb.out || calls != 2 || fb.n != 1 {
+		t.Fatalf("out %q err %v, %d model calls, %d fallback calls", out, err, calls, fb.n)
+	}
+}
+
+type countingTr struct {
+	out string
+	n   int
+}
+
+func (c *countingTr) Translate(context.Context, string, string, string, Glossary) (string, error) {
+	c.n++
+	return c.out, nil
+}
+
+func TestGarbled(t *testing.T) {
+	hi := "सोई ब्रह्मा जी प्रकट हो गए रुकियो रुकियो रुकियो।"
+	if !Garbled(hi, "సోయ్ బ్రహ్మా జీ ప్రకాష్ హో గయే రukiyో రukiyో రukiyో.", "te") {
+		t.Error("half-Latin words not caught")
+	}
+	if Garbled(hi, "అప్పుడు బ్రహ్మ ప్రత్యక్షమై ఆగు ఆగు ఆగు అన్నారు.", "te") {
+		t.Error("a translation was rejected")
+	}
+	if Garbled("हमारी team ने cost बचाई", "మా team cost ఆదా చేసింది", "te") {
+		t.Error("English words of a code-mixed line are fine")
+	}
+}

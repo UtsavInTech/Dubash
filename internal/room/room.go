@@ -139,9 +139,26 @@ type Status struct {
 	FirstCaptionMs int64 `json:"firstCaptionMs"`
 	// Dropped counts lines a language skipped because it fell behind.
 	Dropped map[string]int `json:"dropped,omitempty"`
+	// AudioTotalSeconds is all the audio sent to recognition since the
+	// server started (paused audio excluded): what recognition bills.
+	AudioTotalSeconds float64 `json:"audioTotalSeconds"`
+	// TranslatedChars counts the characters sent for translation, per
+	// target language, since the server started.
+	TranslatedChars map[string]int64 `json:"translatedChars,omitempty"`
+	// Cost is filled in by the web layer from these counts and prices.
+	Cost *Cost `json:"cost,omitempty"`
 	// ContextVersion is the Dictation Bank version in force (0: none).
 	ContextVersion int `json:"contextVersion"`
 	ContextEntries int `json:"contextEntries"`
+}
+
+// Cost estimates what a room has cost so far, in rupees.
+type Cost struct {
+	Speech      float64            `json:"speech"`
+	Translation map[string]float64 `json:"translation"`
+	Total       float64            `json:"total"`
+	// PerHour is Total over the audio hours recognized.
+	PerHour float64 `json:"perHour"`
 }
 
 // Room is one stage.
@@ -184,6 +201,8 @@ type Room struct {
 	dropped   map[string]int
 	// backfilling marks languages whose history is being translated.
 	backfilling map[string]bool
+	audioTotal  int64            // bytes sent to recognition since start
+	trChars     map[string]int64 // characters sent for translation, per language
 }
 
 // New builds a room and restores its recent history from the store.
@@ -197,7 +216,7 @@ func New(cfg config.Room, deps Deps) (*Room, error) {
 	}
 	r := &Room{
 		cfg: cfg, deps: deps, hub: NewHub(ringSize, seed), speaking: cfg.Source, level: asr.DBFS(0),
-		trLat: map[string][]time.Duration{}, dropped: map[string]int{}, backfilling: map[string]bool{},
+		trLat: map[string][]time.Duration{}, dropped: map[string]int{}, backfilling: map[string]bool{}, trChars: map[string]int64{},
 	}
 	r.vocab.Store(bank.NewContext(bank.Version{Event: cfg.ID}, cfg.Glossary))
 	if n := len(seed); n > 0 {
@@ -270,6 +289,7 @@ func (r *Room) Correct(ctx context.Context, id int, text string) (before, after 
 		stored.Translations = map[string]string{}
 		for _, l := range langs {
 			wg.Go(func() {
+				r.countChars(l, []job{{seg: stored}})
 				out, err := r.deps.Translator.Translate(tctx, stored.Text, stored.Lang, l, vocab.Glossary(stored.Lang, l))
 				tr := caption.Translation{Room: stored.Room, Segment: id, Epoch: stored.Epoch, Rev: stored.Rev, Lang: l, Text: out}
 				mu.Lock()
@@ -348,6 +368,11 @@ func (r *Room) Backfill(lang string) {
 			for i, s := range batch {
 				lines[i] = s.Text
 			}
+			jobs := make([]job, len(batch))
+			for i, s := range batch {
+				jobs[i] = job{seg: s}
+			}
+			r.countChars(lang, jobs)
 			outs, err := r.translateLines(ctx, lines, src, lang, vocab.Glossary(src, lang))
 			if err != nil {
 				r.recordError(fmt.Sprintf("history into %s: %v", lang, err))
@@ -363,6 +388,16 @@ func (r *Room) Backfill(lang string) {
 			}
 		}
 	}()
+}
+
+func (r *Room) countChars(lang string, batch []job) {
+	n := 0
+	for _, j := range batch {
+		n += len([]rune(j.seg.Text))
+	}
+	r.mu.Lock()
+	r.trChars[lang] += int64(n)
+	r.mu.Unlock()
 }
 
 // translateLines translates lines in one request when the translator can,
@@ -592,6 +627,7 @@ func (r *Room) meter(ctx context.Context, audio <-chan []byte, out chan<- []byte
 		paused := r.paused
 		if !paused {
 			r.audio += int64(len(chunk))
+			r.audioTotal += int64(len(chunk))
 		}
 		r.lastAudio = now
 		if db > r.level || now.Sub(r.levelAt) > levelWindow {
@@ -675,7 +711,12 @@ func (r *Room) Status() Status {
 		dropped[l] = n
 	}
 	vocab := r.vocab.Load()
+	chars := map[string]int64{}
+	for l, n := range r.trChars {
+		chars[l] = n
+	}
 	return Status{
+		AudioTotalSeconds: float64(r.audioTotal) / asr.BytesPerSecond, TranslatedChars: chars,
 		ContextVersion: vocab.Version.Number, ContextEntries: len(vocab.Version.Entries),
 		ID: r.cfg.ID, Title: r.cfg.Title, Speaker: r.cfg.Speaker, Source: r.speaking, Targets: r.targets(r.speaking),
 		Live: r.live, Paused: r.paused, Ended: r.ended, Epoch: r.epoch,
@@ -819,6 +860,7 @@ func (p *pipeline) translate(ctx context.Context, lang string, batch []job) {
 	defer cancel()
 	src := batch[0].seg.Lang
 	glossary := batch[0].vocab.Glossary(src, lang)
+	p.r.countChars(lang, batch)
 	outs := make([]string, len(batch))
 	errs := make([]error, len(batch))
 	call := func(f func() error) error {

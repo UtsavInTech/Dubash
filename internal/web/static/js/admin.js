@@ -79,6 +79,17 @@ async function control(s, action) {
   refresh();
 }
 
+// Cost: what recognition and each language's translation have cost so
+// far, and the rate per hour of recognized audio.
+function costCell(s) {
+  const c = s.cost;
+  if (!c || !c.total) return el('td', { className: 'num', textContent: '—' });
+  const per = Object.entries(c.translation ?? {}).map(([l, v]) => `${l.toUpperCase()} ₹${v.toFixed(2)}`);
+  return el('td', { className: 'num' }, `₹${c.total.toFixed(2)}`,
+    el('span', { className: 'sub', textContent: `speech ₹${c.speech.toFixed(2)}${per.length ? ` · ${per.join(' · ')}` : ''}` }),
+    el('span', { className: 'sub', textContent: c.perHour ? `₹${c.perHour.toFixed(0)} per hour` : '' }));
+}
+
 // Readers per language, and how long each language's translations take.
 function readersCell(s) {
   const per = Object.entries(s.listeners ?? {}).filter(([l]) => l).map(([l, n]) => `${l.toUpperCase()} ${n}`);
@@ -128,6 +139,7 @@ function row(s) {
     el('td', { className: 'num', textContent: String(s.segments) }),
     delayCell(s),
     errors,
+    costCell(s),
     el('td', { className: 'links' }, ...links, el('div', {}, ...actions)));
 }
 

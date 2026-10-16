@@ -45,6 +45,12 @@ var metrics = []metric{
 		func(s room.Status) float64 { return b2f(s.Paused) }},
 	{"dubash_room_first_caption_seconds", "gauge", "Time from the start of the current or last transmission to its first committed line.",
 		func(s room.Status) float64 { return float64(s.FirstCaptionMs) / 1000 }},
+	{"dubash_room_recognized_audio_seconds_total", "counter", "Audio sent to recognition since the server started (pauses excluded).",
+		func(s room.Status) float64 { return s.AudioTotalSeconds }},
+	{"dubash_room_cost_inr", "gauge", "Estimated cost so far (recognition and translation), in rupees.",
+		func(s room.Status) float64 { return s.Cost.Total }},
+	{"dubash_room_cost_per_audio_hour_inr", "gauge", "Estimated cost per hour of recognized audio, in rupees.",
+		func(s room.Status) float64 { return s.Cost.PerHour }},
 }
 
 // langMetric is a metric family with a value per room and language.
@@ -62,6 +68,16 @@ var langMetrics = []langMetric{
 			}
 			return out
 		}},
+	{"dubash_room_translated_chars_total", "counter", "Characters sent for translation, per target language.",
+		func(s room.Status) map[string]float64 {
+			out := map[string]float64{}
+			for l, n := range s.TranslatedChars {
+				out[l] = float64(n)
+			}
+			return out
+		}},
+	{"dubash_room_translation_cost_inr", "gauge", "Estimated translation cost so far, per target language, in rupees.",
+		func(s room.Status) map[string]float64 { return s.Cost.Translation }},
 	{"dubash_room_dropped_lines_total", "counter", "Lines a language skipped because its translations fell behind.",
 		func(s room.Status) map[string]float64 {
 			out := map[string]float64{}
@@ -84,10 +100,7 @@ func quantiles(b *bytes.Buffer, name, labels string, l room.Latency) {
 // metrics serves every room's status in the Prometheus text format, for
 // alerting on a room that goes silent or starts failing mid-event.
 func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
-	statuses := make([]room.Status, len(s.order))
-	for i, rm := range s.order {
-		statuses[i] = rm.Status()
-	}
+	statuses := s.statuses()
 	var b bytes.Buffer
 	for _, m := range metrics {
 		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s %s\n", m.name, m.help, m.name, m.kind)
