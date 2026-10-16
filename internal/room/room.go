@@ -37,6 +37,16 @@ const translateTimeout = 15 * time.Second
 // skips lines instead of delaying the others.
 const langQueue = 32
 
+// maxBatch is the most lines translated in one request, when several are
+// waiting (an utterance commits all its sentences at once). With
+// translate.Batcher providers this cut requests, and so rate-limit waits;
+// the neighbouring lines also give the translator context.
+const maxBatch = 8
+
+// rateLimitRetry is how long a rate-limited request waits before its one
+// retry.
+const rateLimitRetry = 2 * time.Second
+
 // talkGap is how long a room may stay idle and still continue the same
 // talk: a reconnecting operator keeps it, the next talk after a break
 // starts a new one.
@@ -562,32 +572,109 @@ func (p *pipeline) worker(ctx context.Context, lang string) chan job {
 	ch := make(chan job, langQueue)
 	p.workers[lang] = ch
 	p.wg.Go(func() {
-		for j := range ch {
-			p.translate(ctx, lang, j)
+		var next *job
+		for {
+			var batch []job
+			if next != nil {
+				batch, next = []job{*next}, nil
+			} else if j, ok := <-ch; ok {
+				batch = []job{j}
+			} else {
+				return
+			}
+			// Take the lines already waiting, within the batch limits.
+			chars := len([]rune(batch[0].seg.Text))
+		gather:
+			for len(batch) < maxBatch {
+				select {
+				case j, ok := <-ch:
+					if !ok {
+						break gather
+					}
+					if chars += len([]rune(j.seg.Text)) + 1; chars > translate.MaxBatchChars {
+						next = &j
+						break gather
+					}
+					batch = append(batch, j)
+				default:
+					break gather
+				}
+			}
+			p.translate(ctx, lang, batch)
 		}
 	})
 	return ch
 }
 
-func (p *pipeline) translate(ctx context.Context, lang string, j job) {
+// translate translates a batch of consecutive lines into lang, in one
+// request when the provider can, and publishes each line's translation in
+// order.
+func (p *pipeline) translate(ctx context.Context, lang string, batch []job) {
 	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), translateTimeout)
 	defer cancel()
-	out, err := p.r.deps.Translator.Translate(tctx, j.seg.Text, j.seg.Lang, lang, p.r.cfg.Glossary)
-	tr := caption.Translation{Room: j.seg.Room, Segment: j.seg.ID, Epoch: j.seg.Epoch, Rev: j.seg.Rev, Lang: lang, Text: out}
-	res := result{id: j.seg.ID, lang: lang, text: out}
-	if err != nil {
-		tr.Error = err.Error()
-		res.err = err.Error()
-		p.r.recordError(err.Error())
+	src := batch[0].seg.Lang
+	outs := make([]string, len(batch))
+	errs := make([]error, len(batch))
+	call := func(f func() error) error {
+		err := f()
+		if errors.Is(err, translate.ErrRateLimited) {
+			select {
+			case <-time.After(rateLimitRetry):
+				err = f()
+			case <-tctx.Done():
+			}
+		}
+		return err
 	}
-	p.r.hub.Publish(Msg{Event: "translation", Lang: lang, Data: tr, Segment: j.seg.ID})
-	took := time.Since(j.received)
-	p.r.mu.Lock()
-	p.r.trLat[lang] = keep(p.r.trLat[lang], took)
-	p.r.latency += took
-	p.r.latencyN++
-	p.r.mu.Unlock()
-	p.results <- res
+	b, batched := p.r.deps.Translator.(translate.Batcher)
+	done := false
+	if batched && len(batch) > 1 {
+		lines := make([]string, len(batch))
+		for i, j := range batch {
+			lines[i] = j.seg.Text
+		}
+		var got []string
+		err := call(func() (err error) {
+			got, err = b.TranslateBatch(tctx, lines, src, lang, p.r.cfg.Glossary)
+			return err
+		})
+		switch {
+		case err == nil:
+			copy(outs, got)
+			done = true
+		case !errors.Is(err, translate.ErrBatchSplit):
+			for i := range errs {
+				errs[i] = err
+			}
+			done = true
+		}
+	}
+	if !done { // one by one
+		for i, j := range batch {
+			errs[i] = call(func() (err error) {
+				outs[i], err = p.r.deps.Translator.Translate(tctx, j.seg.Text, src, lang, p.r.cfg.Glossary)
+				return err
+			})
+		}
+	}
+	for i, j := range batch {
+		tr := caption.Translation{Room: j.seg.Room, Segment: j.seg.ID, Epoch: j.seg.Epoch, Rev: j.seg.Rev, Lang: lang, Text: outs[i]}
+		res := result{id: j.seg.ID, lang: lang, text: outs[i]}
+		if errs[i] != nil {
+			tr.Text, res.text = "", ""
+			tr.Error = errs[i].Error()
+			res.err = errs[i].Error()
+			p.r.recordError(errs[i].Error())
+		}
+		p.r.hub.Publish(Msg{Event: "translation", Lang: lang, Data: tr, Segment: j.seg.ID})
+		took := time.Since(j.received)
+		p.r.mu.Lock()
+		p.r.trLat[lang] = keep(p.r.trLat[lang], took)
+		p.r.latency += took
+		p.r.latencyN++
+		p.r.mu.Unlock()
+		p.results <- res
+	}
 }
 
 // close waits for the translations in flight and the last stores.

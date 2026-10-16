@@ -71,6 +71,42 @@ func (s Sarvam) Translate(ctx context.Context, text, src, dst string, glossary [
 	return restored, nil
 }
 
+// MaxBatchChars bounds one batched request (sarvam-translate:v1 takes
+// 2000 characters).
+const MaxBatchChars = 1800
+
+// TranslateBatch implements Batcher: the lines go in one request, one per
+// line; Sarvam keeps single line breaks (probe in sarvam_probe2_test.go,
+// 2026-10-16: 5 of 5 lines in en, te and kn).
+func (s Sarvam) TranslateBatch(ctx context.Context, lines []string, src, dst string, glossary []string) ([]string, error) {
+	if len(lines) == 1 {
+		out, err := s.Translate(ctx, lines[0], src, dst, glossary)
+		return []string{out}, err
+	}
+	from, to := lang.Sarvam(src), lang.Sarvam(dst)
+	if from == "" || to == "" {
+		return nil, fmt.Errorf("sarvam translate: %s→%s is not supported", src, dst)
+	}
+	clean := make([]string, len(lines))
+	for i, l := range lines {
+		clean[i] = strings.Join(strings.Fields(l), " ") // no line breaks inside a line
+	}
+	masked, slots := Mask(strings.Join(clean, "\n"), glossary)
+	out, err := s.call(ctx, masked, from, to)
+	if err != nil {
+		return nil, err
+	}
+	restored, ok := Unmask(out, slots)
+	parts := strings.Split(strings.TrimSpace(restored), "\n")
+	if !ok || len(parts) != len(lines) {
+		return nil, ErrBatchSplit
+	}
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts, nil
+}
+
 func (s Sarvam) call(ctx context.Context, text, from, to string) (string, error) {
 	if s.Limiter != nil {
 		if err := s.Limiter.Wait(ctx); err != nil {
@@ -214,34 +250,42 @@ func Unmask(s string, slots []string) (string, bool) {
 	return s, ok
 }
 
-// RateLimiter spaces requests to at most perMinute, shared by everything
-// that calls one provider account (Sarvam's limits are per account).
+// RateLimiter keeps requests within perMinute, shared by everything that
+// calls one provider account (Sarvam's limits are per account). It lets a
+// burst of up to a tenth of the minute's budget go at once (the lines of
+// one utterance, in several languages), then spaces requests evenly: the
+// generic cell rate algorithm. Spacing every request evenly made a
+// five-sentence utterance in three languages wait up to 14 s.
 type RateLimiter struct {
 	mu       sync.Mutex
-	interval time.Duration
-	next     time.Time
+	interval time.Duration // between requests at the sustained rate
+	slack    time.Duration // how far ahead of now the schedule may run
+	tat      time.Time     // theoretical arrival time of the next request
 }
 
-// NewRateLimiter allows perMinute requests a minute, evenly spaced.
+// NewRateLimiter allows perMinute requests a minute.
 func NewRateLimiter(perMinute int) *RateLimiter {
 	if perMinute <= 0 {
 		return nil
 	}
-	return &RateLimiter{interval: time.Minute / time.Duration(perMinute)}
+	interval := time.Minute / time.Duration(perMinute)
+	burst := max(1, perMinute/10)
+	return &RateLimiter{interval: interval, slack: interval * time.Duration(burst-1)}
 }
 
 // Wait blocks until the next request may go, or ctx ends.
 func (l *RateLimiter) Wait(ctx context.Context) error {
 	l.mu.Lock()
 	now := time.Now()
-	at := l.next
-	if at.Before(now) {
-		at = now
+	tat := l.tat
+	if tat.Before(now) {
+		tat = now
 	}
-	l.next = at.Add(l.interval)
+	wait := tat.Sub(now) - l.slack
+	l.tat = tat.Add(l.interval)
 	l.mu.Unlock()
-	if d := time.Until(at); d > 0 {
-		t := time.NewTimer(d)
+	if wait > 0 {
+		t := time.NewTimer(wait)
 		defer t.Stop()
 		select {
 		case <-t.C:

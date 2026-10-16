@@ -6,6 +6,7 @@ package room
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -582,4 +583,84 @@ func TestStatusMetersAudio(t *testing.T) {
 	if s.AudioLevel < -7 || s.AudioLevel > -5 {
 		t.Fatalf("level = %.1f dBFS, want about -6", s.AudioLevel)
 	}
+}
+
+// batcher translates batches, counting calls; with split set it loses the
+// line breaks (the provider merged the lines).
+type batcher struct {
+	mu      sync.Mutex
+	batches [][]string
+	singles int
+	split   bool
+}
+
+func (b *batcher) Translate(_ context.Context, text, _, dst string, _ []string) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.singles++
+	return "[" + dst + "] " + text, nil
+}
+
+func (b *batcher) TranslateBatch(_ context.Context, lines []string, _, dst string, _ []string) ([]string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.batches = append(b.batches, lines)
+	if b.split {
+		return nil, translate.ErrBatchSplit
+	}
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = "[" + dst + "] " + l
+	}
+	return out, nil
+}
+
+// TestRoomBatchesWaitingLines: an utterance that commits five sentences at
+// once is translated in fewer requests than lines, every line in order.
+func TestRoomBatchesWaitingLines(t *testing.T) {
+	for _, split := range []bool{false, true} {
+		var evs scripted
+		for i := range 5 {
+			evs = append(evs, asr.Event{Kind: asr.Final, Text: fmt.Sprintf("वाक्य %d।", i)})
+		}
+		b := &batcher{split: split}
+		rm := newRoomWith(t, config.Room{ID: "a", Source: "hi", Targets: []string{"te"}}, newStore(t), evs, slowFirst{b})
+		sub, _, cancel := rm.Hub().Subscribe(64, "te", "")
+		audio := make(chan []byte)
+		close(audio)
+		if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+			t.Fatal(err)
+		}
+		got := finals(sub)
+		cancel()
+		for i, s := range got {
+			if s.Translations["te"] != fmt.Sprintf("[te] वाक्य %d।", i) {
+				t.Fatalf("split=%v line %d: %+v", split, i, s)
+			}
+		}
+		if len(got) != 5 {
+			t.Fatalf("split=%v: %d lines", split, len(got))
+		}
+		calls := len(b.batches) + b.singles
+		if !split && calls >= 5 {
+			t.Errorf("5 waiting lines took %d requests: %v", calls, b.batches)
+		}
+		if split && b.singles == 0 {
+			t.Errorf("a batch that lost its line breaks was not retried line by line")
+		}
+	}
+}
+
+// slowFirst holds the first request a moment, so the next lines queue up
+// behind it as they do behind a real network call.
+type slowFirst struct{ *batcher }
+
+func (s slowFirst) Translate(ctx context.Context, text, src, dst string, g []string) (string, error) {
+	s.mu.Lock()
+	first := s.singles == 0 && len(s.batches) == 0
+	s.mu.Unlock()
+	if first {
+		time.Sleep(50 * time.Millisecond)
+	}
+	return s.batcher.Translate(ctx, text, src, dst, g)
 }

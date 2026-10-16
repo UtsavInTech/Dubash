@@ -17,6 +17,19 @@ type Translator interface {
 	Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error)
 }
 
+// Batcher is a Translator that can translate several consecutive lines in
+// one request, returning one translation per line, in order. Fewer
+// requests matter under a provider's rate limit, and the neighbouring
+// lines give each other context.
+type Batcher interface {
+	Translator
+	TranslateBatch(ctx context.Context, lines []string, src, dst string, glossary []string) ([]string, error)
+}
+
+// ErrBatchSplit means a batch came back with a different number of lines
+// than were sent; the caller translates them one by one instead.
+var ErrBatchSplit = errors.New("batch translation lost its line breaks")
+
 func name(code string) string { return lang.Name(code) }
 
 // Prompt is the system instruction for one language pair.

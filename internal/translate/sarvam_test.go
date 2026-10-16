@@ -86,15 +86,28 @@ func TestSarvamRateLimited(t *testing.T) {
 }
 
 func TestRateLimiter(t *testing.T) {
-	l := NewRateLimiter(600) // one every 100 ms
+	l := NewRateLimiter(600) // one every 100 ms, bursts of 60
 	start := time.Now()
-	for range 4 {
+	for range 60 {
 		if err := l.Wait(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if d := time.Since(start); d < 280*time.Millisecond || d > 600*time.Millisecond {
-		t.Errorf("4 requests took %v, want about 300 ms", d)
+	if d := time.Since(start); d > 50*time.Millisecond {
+		t.Errorf("a burst of 60 took %v, want at once", d)
+	}
+	start = time.Now()
+	for range 4 {
+		l.Wait(context.Background())
+	}
+	if d := time.Since(start); d < 350*time.Millisecond || d > 700*time.Millisecond {
+		t.Errorf("4 requests after the burst took %v, want about 400 ms", d)
+	}
+	// 60 a minute over a long run: never more than the budget.
+	l3 := NewRateLimiter(60)
+	l3.Wait(context.Background())
+	if l3.slack != 5*time.Second {
+		t.Errorf("slack %v, want 5 s (a burst of 6)", l3.slack)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -105,5 +118,30 @@ func TestRateLimiter(t *testing.T) {
 	}
 	if NewRateLimiter(0) != nil {
 		t.Error("0 per minute should mean no limiter")
+	}
+}
+
+func TestSarvamBatch(t *testing.T) {
+	var inputs []string
+	split := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		json.NewDecoder(r.Body).Decode(&body)
+		inputs = append(inputs, body["input"])
+		out := strings.ReplaceAll(body["input"], "एक", "ఒకటి")
+		if !split {
+			out = strings.ReplaceAll(out, "\n", " ")
+		}
+		json.NewEncoder(w).Encode(map[string]string{"translated_text": out})
+	}))
+	defer srv.Close()
+	s := Sarvam{Key: "k", URL: srv.URL}
+	got, err := s.TranslateBatch(context.Background(), []string{"एक Dubash", "दो\nलाइन", "तीन"}, "hi", "te", []string{"Dubash"})
+	if err != nil || strings.Join(got, "|") != "ఒకటి Dubash|दो लाइन|तीन" || inputs[0] != "एक [1]\nदो लाइन\nतीन" {
+		t.Fatalf("got %q err %v sent %q", got, err, inputs)
+	}
+	split = false
+	if _, err := s.TranslateBatch(context.Background(), []string{"एक", "दो"}, "hi", "te", nil); err != ErrBatchSplit {
+		t.Fatalf("lost line breaks: %v", err)
 	}
 }
