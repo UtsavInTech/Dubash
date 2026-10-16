@@ -8,7 +8,7 @@ repo="$(cd "$dir/.." && pwd)"
 data="$(mktemp -d)"
 go build -C "$repo" -o "$dir/bin/" ./cmd/dubash ./cmd/dubash-ingest
 cd "$repo"
-ADMIN_TOKEN=secreto "$dir/bin/dubash" -fake -addr 127.0.0.1:8080 -data "$data" 2>"$data/server.log" &
+ADMIN_TOKEN=secreto "$dir/bin/dubash" -fake -config "$dir/rooms.yaml" -addr 127.0.0.1:8080 -data "$data" 2>"$data/server.log" &
 server=$!
 trap 'kill $server 2>/dev/null; rm -rf "$data"' EXIT
 for _ in $(seq 50); do

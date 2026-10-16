@@ -2,7 +2,12 @@ import { NAMES } from './langs.js';
 
 const MAX_LINES = { mobile: 500, screen: 3, overlay: 2 };
 
-// The page speaks the language the reader chose for the captions.
+// The page speaks the language the reader chose for the captions; keys
+// missing in a language fall back to English. The Hindi, Telugu, Kannada
+// and Tamil strings were written by the Dubash contributors and still need
+// a review by native speakers (docs/DECISIONS.md).
+// Modified by the Dubash contributors: Indian languages, translations sent
+// per language, pending lines, paused and ended states, resume.
 const UI = {
   es: {
     back: '‹ Salas', language: 'Idioma', settings: 'Ajustes de lectura', 'settings-short': 'Ajustes', captions: 'Subtítulos',
@@ -16,15 +21,74 @@ const UI = {
     live: 'En vivo', offline: 'Sin transmisión', download: 'Descargar la transcripción', 'this-talk': 'Esta charla', 'whole-room': 'Toda la sala', notfound: 'No encontramos esa sala.', listen: 'Escuchar',
   },
   en: {
-    back: '‹ Rooms', language: 'Language', settings: 'Reading settings', 'settings-short': 'Settings', captions: 'Captions',
-    'waiting-title': 'No captions yet', waiting: 'They will show up here as soon as the talk starts.',
+    back: '‹ Events', language: 'Language', settings: 'Reading settings', 'settings-short': 'Settings', captions: 'Captions',
+    'waiting-title': 'No captions yet', waiting: 'They will show up here as soon as the speaker starts.',
     scan: 'Scan to read in your language', follow: '↓ Jump to latest', close: 'Close', size: 'Text size',
     'size-0': 'Normal', 'size-1': 'Large', 'size-2': 'Very large', 'size-3': 'Huge',
-    colors: 'Colors', 'theme-auto': 'Same as my device', 'theme-light': 'Light background', 'theme-dark': 'Dark background',
+    colors: 'Colours', 'theme-auto': 'Same as my device', 'theme-light': 'Light background', 'theme-dark': 'Dark background',
     'theme-contrast': 'High contrast', 'theme-contrast-hint': 'White and yellow on black',
     text: 'Text', spacing: 'More space between letters and lines', 'spacing-hint': 'Can help with dyslexia or low vision',
     'show-original': 'Show the original under the translation', untranslated: '(not translated)',
-    live: 'Live', offline: 'Not streaming', download: 'Download the transcript', 'this-talk': 'This talk', 'whole-room': 'The whole room', notfound: 'We could not find that room.', listen: 'Listen',
+    live: 'Live', offline: 'Not streaming', download: 'Download the transcript', 'this-talk': 'This session', 'whole-room': 'The whole event', notfound: 'We could not find that event.', listen: 'Listen',
+    paused: 'Paused', 'paused-msg': 'The captions are paused. They will continue here.',
+    'ended-title': 'The event has ended', ended: 'Thank you for joining. You can download the transcript below.',
+    welcome: 'Welcome to {title}', speaker: 'Speaker: {name}', translating: 'translating…', reconnecting: 'Reconnecting…',
+  },
+  hi: {
+    back: '‹ कार्यक्रम', language: 'भाषा', settings: 'पढ़ने की सेटिंग', 'settings-short': 'सेटिंग', captions: 'कैप्शन',
+    'waiting-title': 'अभी कोई कैप्शन नहीं', waiting: 'वक्ता के बोलना शुरू करते ही यहाँ दिखेंगे।',
+    scan: 'अपनी भाषा में पढ़ने के लिए स्कैन करें', follow: '↓ सबसे नए पर जाएँ', close: 'बंद करें', size: 'अक्षरों का आकार',
+    'size-0': 'सामान्य', 'size-1': 'बड़ा', 'size-2': 'बहुत बड़ा', 'size-3': 'सबसे बड़ा',
+    colors: 'रंग', 'theme-auto': 'डिवाइस जैसा', 'theme-light': 'हल्की पृष्ठभूमि', 'theme-dark': 'गहरी पृष्ठभूमि',
+    'theme-contrast': 'उच्च कंट्रास्ट', 'theme-contrast-hint': 'काले पर सफ़ेद और पीला',
+    text: 'अक्षर', spacing: 'अक्षरों और पंक्तियों के बीच ज़्यादा जगह', 'spacing-hint': 'डिस्लेक्सिया या कमज़ोर नज़र में मदद कर सकता है',
+    'show-original': 'अनुवाद के नीचे मूल पाठ दिखाएँ', untranslated: '(अनुवाद नहीं हुआ)',
+    live: 'लाइव', offline: 'प्रसारण नहीं', download: 'पूरा पाठ डाउनलोड करें', 'this-talk': 'यह सत्र', 'whole-room': 'पूरा कार्यक्रम', notfound: 'यह कार्यक्रम नहीं मिला।', listen: 'सुनें',
+    paused: 'रुका हुआ', 'paused-msg': 'कैप्शन अभी रुके हुए हैं। यहीं फिर से शुरू होंगे।',
+    'ended-title': 'कार्यक्रम समाप्त हुआ', ended: 'जुड़ने के लिए धन्यवाद। नीचे से पूरा पाठ डाउनलोड कर सकते हैं।',
+    welcome: '{title} में आपका स्वागत है', speaker: 'वक्ता: {name}', translating: 'अनुवाद हो रहा है…', reconnecting: 'फिर से जुड़ रहे हैं…',
+  },
+  te: {
+    back: '‹ కార్యక్రమాలు', language: 'భాష', settings: 'చదివే సెట్టింగ్‌లు', 'settings-short': 'సెట్టింగ్‌లు', captions: 'క్యాప్షన్‌లు',
+    'waiting-title': 'ఇంకా క్యాప్షన్‌లు లేవు', waiting: 'వక్త మాట్లాడటం మొదలుపెట్టగానే ఇక్కడ కనిపిస్తాయి.',
+    scan: 'మీ భాషలో చదవడానికి స్కాన్ చేయండి', follow: '↓ తాజాదానికి వెళ్ళండి', close: 'మూసివేయండి', size: 'అక్షరాల పరిమాణం',
+    'size-0': 'సాధారణం', 'size-1': 'పెద్దది', 'size-2': 'చాలా పెద్దది', 'size-3': 'అతి పెద్దది',
+    colors: 'రంగులు', 'theme-auto': 'పరికరం లాగానే', 'theme-light': 'లేత నేపథ్యం', 'theme-dark': 'ముదురు నేపథ్యం',
+    'theme-contrast': 'అధిక కాంట్రాస్ట్', 'theme-contrast-hint': 'నలుపుపై తెలుపు మరియు పసుపు',
+    text: 'అక్షరాలు', spacing: 'అక్షరాలు, పంక్తుల మధ్య ఎక్కువ ఖాళీ', 'spacing-hint': 'డిస్లెక్సియా లేదా తక్కువ చూపు ఉన్నవారికి సహాయపడవచ్చు',
+    'show-original': 'అనువాదం కింద అసలు పాఠం చూపించు', untranslated: '(అనువదించలేదు)',
+    live: 'ప్రత్యక్షం', offline: 'ప్రసారం లేదు', download: 'పూర్తి పాఠం డౌన్‌లోడ్ చేయండి', 'this-talk': 'ఈ సెషన్', 'whole-room': 'మొత్తం కార్యక్రమం', notfound: 'ఈ కార్యక్రమం కనబడలేదు.', listen: 'వినండి',
+    paused: 'ఆపివేయబడింది', 'paused-msg': 'క్యాప్షన్‌లు ప్రస్తుతం ఆగాయి. ఇక్కడే మళ్ళీ కొనసాగుతాయి.',
+    'ended-title': 'కార్యక్రమం ముగిసింది', ended: 'పాల్గొన్నందుకు ధన్యవాదాలు. కింద పూర్తి పాఠం డౌన్‌లోడ్ చేసుకోవచ్చు.',
+    welcome: '{title}కు స్వాగతం', speaker: 'వక్త: {name}', translating: 'అనువదిస్తోంది…', reconnecting: 'మళ్ళీ కనెక్ట్ అవుతోంది…',
+  },
+  kn: {
+    back: '‹ ಕಾರ್ಯಕ್ರಮಗಳು', language: 'ಭಾಷೆ', settings: 'ಓದುವ ಸೆಟ್ಟಿಂಗ್‌ಗಳು', 'settings-short': 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು', captions: 'ಶೀರ್ಷಿಕೆಗಳು',
+    'waiting-title': 'ಇನ್ನೂ ಶೀರ್ಷಿಕೆಗಳಿಲ್ಲ', waiting: 'ಭಾಷಣಕಾರರು ಮಾತನಾಡಲು ಆರಂಭಿಸಿದ ತಕ್ಷಣ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.',
+    scan: 'ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಓದಲು ಸ್ಕ್ಯಾನ್ ಮಾಡಿ', follow: '↓ ಇತ್ತೀಚಿನದಕ್ಕೆ ಹೋಗಿ', close: 'ಮುಚ್ಚಿ', size: 'ಅಕ್ಷರದ ಗಾತ್ರ',
+    'size-0': 'ಸಾಮಾನ್ಯ', 'size-1': 'ದೊಡ್ಡದು', 'size-2': 'ತುಂಬಾ ದೊಡ್ಡದು', 'size-3': 'ಅತಿ ದೊಡ್ಡದು',
+    colors: 'ಬಣ್ಣಗಳು', 'theme-auto': 'ಸಾಧನದಂತೆ', 'theme-light': 'ತಿಳಿ ಹಿನ್ನೆಲೆ', 'theme-dark': 'ಗಾಢ ಹಿನ್ನೆಲೆ',
+    'theme-contrast': 'ಹೆಚ್ಚಿನ ಕಾಂಟ್ರಾಸ್ಟ್', 'theme-contrast-hint': 'ಕಪ್ಪಿನ ಮೇಲೆ ಬಿಳಿ ಮತ್ತು ಹಳದಿ',
+    text: 'ಪಠ್ಯ', spacing: 'ಅಕ್ಷರಗಳು ಮತ್ತು ಸಾಲುಗಳ ನಡುವೆ ಹೆಚ್ಚು ಅಂತರ', 'spacing-hint': 'ಡಿಸ್ಲೆಕ್ಸಿಯಾ ಅಥವಾ ಕಡಿಮೆ ದೃಷ್ಟಿಗೆ ಸಹಾಯವಾಗಬಹುದು',
+    'show-original': 'ಅನುವಾದದ ಕೆಳಗೆ ಮೂಲ ಪಠ್ಯ ತೋರಿಸಿ', untranslated: '(ಅನುವಾದವಾಗಿಲ್ಲ)',
+    live: 'ನೇರ ಪ್ರಸಾರ', offline: 'ಪ್ರಸಾರವಿಲ್ಲ', download: 'ಪೂರ್ಣ ಪಠ್ಯ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ', 'this-talk': 'ಈ ಅವಧಿ', 'whole-room': 'ಇಡೀ ಕಾರ್ಯಕ್ರಮ', notfound: 'ಈ ಕಾರ್ಯಕ್ರಮ ಸಿಗಲಿಲ್ಲ.', listen: 'ಕೇಳಿ',
+    paused: 'ವಿರಾಮ', 'paused-msg': 'ಶೀರ್ಷಿಕೆಗಳು ಸದ್ಯಕ್ಕೆ ನಿಂತಿವೆ. ಇಲ್ಲೇ ಮುಂದುವರಿಯುತ್ತವೆ.',
+    'ended-title': 'ಕಾರ್ಯಕ್ರಮ ಮುಗಿದಿದೆ', ended: 'ಭಾಗವಹಿಸಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದಗಳು. ಕೆಳಗೆ ಪೂರ್ಣ ಪಠ್ಯವನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಬಹುದು.',
+    welcome: '{title}ಗೆ ಸ್ವಾಗತ', speaker: 'ಭಾಷಣಕಾರರು: {name}', translating: 'ಅನುವಾದಿಸಲಾಗುತ್ತಿದೆ…', reconnecting: 'ಮರುಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…',
+  },
+  ta: {
+    back: '‹ நிகழ்ச்சிகள்', language: 'மொழி', settings: 'வாசிப்பு அமைப்புகள்', 'settings-short': 'அமைப்புகள்', captions: 'வசனங்கள்',
+    'waiting-title': 'இன்னும் வசனங்கள் இல்லை', waiting: 'பேச்சாளர் பேசத் தொடங்கியதும் இங்கே தோன்றும்.',
+    scan: 'உங்கள் மொழியில் படிக்க ஸ்கேன் செய்யுங்கள்', follow: '↓ சமீபத்தியதற்குச் செல்லவும்', close: 'மூடு', size: 'எழுத்து அளவு',
+    'size-0': 'சாதாரணம்', 'size-1': 'பெரியது', 'size-2': 'மிகப் பெரியது', 'size-3': 'மிக மிகப் பெரியது',
+    colors: 'நிறங்கள்', 'theme-auto': 'சாதனத்தைப் போல', 'theme-light': 'வெளிர் பின்னணி', 'theme-dark': 'அடர் பின்னணி',
+    'theme-contrast': 'உயர் மாறுபாடு', 'theme-contrast-hint': 'கருப்பில் வெள்ளை மற்றும் மஞ்சள்',
+    text: 'உரை', spacing: 'எழுத்துகள், வரிகளுக்கு இடையே அதிக இடைவெளி', 'spacing-hint': 'டிஸ்லெக்சியா அல்லது குறைந்த பார்வைக்கு உதவலாம்',
+    'show-original': 'மொழிபெயர்ப்பின் கீழ் மூல உரையைக் காட்டு', untranslated: '(மொழிபெயர்க்கப்படவில்லை)',
+    live: 'நேரலை', offline: 'ஒளிபரப்பு இல்லை', download: 'முழு உரையைப் பதிவிறக்கவும்', 'this-talk': 'இந்த அமர்வு', 'whole-room': 'முழு நிகழ்ச்சி', notfound: 'இந்த நிகழ்ச்சி கிடைக்கவில்லை.', listen: 'கேளுங்கள்',
+    paused: 'இடைநிறுத்தம்', 'paused-msg': 'வசனங்கள் இப்போது நிறுத்தப்பட்டுள்ளன. இங்கேயே மீண்டும் தொடரும்.',
+    'ended-title': 'நிகழ்ச்சி முடிந்தது', ended: 'கலந்துகொண்டதற்கு நன்றி. கீழே முழு உரையைப் பதிவிறக்கலாம்.',
+    welcome: '{title} நிகழ்ச்சிக்கு வரவேற்கிறோம்', speaker: 'பேச்சாளர்: {name}', translating: 'மொழிபெயர்க்கப்படுகிறது…', reconnecting: 'மீண்டும் இணைக்கிறது…',
   },
   pt: {
     back: '‹ Salas', language: 'Idioma', settings: 'Ajustes de leitura', 'settings-short': 'Ajustes', captions: 'Legendas',
@@ -94,7 +158,12 @@ let room;
 let lang;
 let interim = '';
 let live = false;
+let state = { paused: false, ended: false };
 let talk = { n: 0, title: '' }; // the room's current talk, from its status
+let events; // the EventSource, reopened when the reader changes language
+// A line whose translation has not come after this long is shown as not
+// translated instead of "translating…".
+const PENDING_MS = 20000;
 
 // ---------- preferences ----------
 const PREFS_KEY = 'dubash.prefs';
@@ -139,8 +208,9 @@ function wirePrefs() {
 }
 
 // ---------- language of the page ----------
-function t(key) {
-  return (UI[lang] ?? UI.es)[key] ?? UI.es[key];
+function t(key, vars = {}) {
+  const s = (UI[lang] ?? UI.en)[key] ?? UI.en[key] ?? key;
+  return s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 }
 
 function translatePage() {
@@ -167,6 +237,13 @@ function pickLang(langs) {
 }
 
 // ---------- captions ----------
+// pending reports a line whose translation into lang is still on its way:
+// it arrived live, after the replay, and not too long ago.
+function pending(seg) {
+  return seg.lang !== lang && !seg.translations?.[lang] && !seg.failed?.[lang] &&
+    seg.live && Date.now() - seg.live < PENDING_MS;
+}
+
 function line(seg) {
   const p = document.createElement('p');
   const span = document.createElement('span');
@@ -175,9 +252,11 @@ function line(seg) {
   if (!translated) span.lang = seg.lang;
   p.append(span);
   if (!translated && seg.lang !== lang) {
+    const waiting = pending(seg);
+    p.classList.toggle('pending', waiting);
     const note = document.createElement('small');
     note.className = 'note';
-    note.textContent = t('untranslated');
+    note.textContent = waiting ? t('translating') : t('untranslated');
     p.append(note);
   }
   if (translated && seg.lang !== lang && prefs.orig && mode === 'mobile') {
@@ -202,7 +281,10 @@ function renderLines({ fresh = false } = {}) {
   if (!room) return;
   const stick = nearBottom();
   const keep = Math.max(1, MAX_LINES[mode] - (mode !== 'mobile' && showsInterim() ? 1 : 0));
-  const ordered = [...segments.values()].sort((a, b) => a.id - b.id).slice(-keep);
+  // The projector and the overlay show only finished lines in the chosen
+  // language: a line waiting for its translation would flicker.
+  const ordered = [...segments.values()].filter((s) => mode === 'mobile' || !pending(s))
+    .sort((a, b) => a.id - b.id).slice(-keep);
   $('lines').replaceChildren(...ordered.map(line));
   renderInterim();
   if (mode !== 'mobile') return;
@@ -220,8 +302,35 @@ function renderInterim() {
 function setLive(on) {
   live = on;
   const badge = $('status');
-  badge.textContent = on ? t('live') : t('offline');
-  badge.classList.toggle('live', on);
+  const paused = on && state.paused;
+  badge.textContent = paused ? t('paused') : on ? t('live') : t('offline');
+  badge.classList.toggle('live', on && !paused);
+  badge.classList.toggle('paused', paused);
+  renderBanner();
+}
+
+// The banner says why no captions are coming: paused, ended, reconnecting.
+let reconnecting = false;
+function renderBanner() {
+  const b = $('banner');
+  let title = '';
+  let text = '';
+  if (state.ended && !live) [title, text] = [t('ended-title'), t('ended')];
+  else if (live && state.paused) [title, text] = [t('paused'), t('paused-msg')];
+  else if (reconnecting) text = t('reconnecting');
+  b.hidden = !text;
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  b.replaceChildren(...(title ? [strong] : []), text);
+}
+
+function renderWelcome() {
+  const w = $('welcome');
+  if (!room) return;
+  const parts = [t('welcome', { title: room.title })];
+  if (room.speaker) parts.push(t('speaker', { name: room.speaker }));
+  w.textContent = parts.join(' · ');
+  w.hidden = false;
 }
 
 function renderLangs() {
@@ -233,18 +342,20 @@ function renderLangs() {
     b.lang = l;
     b.setAttribute('aria-pressed', String(l === lang));
     b.onclick = () => {
+      if (l === lang) return;
       lang = l;
       hush();
       params.set('lang', l);
       history.replaceState(null, '', `?${params}`);
       renderAll();
+      connect(); // the server translates into the languages being read
     };
     return b;
   }));
 }
 
 function renderExports() {
-  const names = { vtt: 'VTT (subtítulos web)', srt: 'SRT (subtítulos de video)', txt: 'TXT (texto)' };
+  const names = { vtt: 'VTT (web subtitles)', srt: 'SRT (video subtitles)', txt: 'TXT (plain text)' };
   const group = (label, query) => {
     const links = ['txt', 'srt', 'vtt'].map((f) => {
       const a = document.createElement('a');
@@ -271,6 +382,7 @@ function renderExports() {
 
 function renderAll() {
   translatePage();
+  renderWelcome();
   renderLangs();
   renderExports();
   renderLines();
@@ -300,7 +412,7 @@ function wireFollow() {
 }
 
 async function main() {
-  lang = UI[params.get('lang')] ? params.get('lang') : 'es';
+  lang = UI[params.get('lang')] ? params.get('lang') : 'en';
   const rooms = await loadRooms();
   room = rooms.find((r) => r.id === roomId);
   if (!room) {
@@ -320,16 +432,46 @@ async function main() {
   showQR();
   keepOverlayLoadable();
 
-  const events = new EventSource(`/events/${encodeURIComponent(roomId)}`);
-  events.addEventListener('final', (e) => {
+  connect();
+  // Pending lines turn into "not translated" when their time is up.
+  setInterval(() => { if ([...segments.values()].some((s) => s.live)) renderLines(); }, 5000);
+}
+
+// connect opens the caption stream for the reader's language. On a dropped
+// connection the browser reconnects by itself and sends the id of the last
+// line it got (Last-Event-ID), and the server sends only what was missed.
+function connect() {
+  events?.close();
+  caughtUp = false;
+  events = new EventSource(`/events/${encodeURIComponent(roomId)}?lang=${encodeURIComponent(lang)}`);
+  const onLine = (e) => {
     const seg = JSON.parse(e.data);
-    const fresh = !segments.has(seg.id);
+    const known = segments.get(seg.id);
+    const fresh = !known;
+    // Keep translations already received: a replay sends the line again.
+    seg.translations = e.type === 'correction' ? {} : { ...(known?.translations ?? {}), ...(seg.translations ?? {}) };
+    seg.failed = {};
+    if (caughtUp) seg.live = Date.now();
     segments.set(seg.id, seg);
     if (segments.size > MAX_LINES.mobile + 50) segments.delete(Math.min(...segments.keys()));
-    interim = '';
+    if (seg.lang === room.source) interim = '';
     renderLines({ fresh });
     if (fresh) freshText();
-    if (fresh && caughtUp) speak(seg);
+    if (fresh && caughtUp && seg.lang === lang) speak(seg.text);
+  };
+  events.addEventListener('final', onLine);
+  events.addEventListener('correction', onLine);
+  events.addEventListener('translation', (e) => {
+    const tr = JSON.parse(e.data);
+    const seg = segments.get(tr.segment);
+    if (!seg || tr.lang !== lang) return;
+    if (tr.error) seg.failed[tr.lang] = true;
+    else seg.translations[tr.lang] = tr.text;
+    renderLines();
+    if (!tr.error) {
+      freshText();
+      if (caughtUp) speak(tr.text);
+    }
   });
   events.addEventListener('interim', (e) => {
     interim = JSON.parse(e.data).text;
@@ -340,6 +482,7 @@ async function main() {
   });
   events.addEventListener('status', (e) => {
     const st = JSON.parse(e.data);
+    state = { paused: !!st.paused, ended: !!st.ended };
     // The operator says which language is spoken in each transmission;
     // that one is the original, the room's others are translations.
     if (st.source && st.source !== room.source) {
@@ -358,7 +501,12 @@ async function main() {
     }
   });
   events.addEventListener('caught-up', () => { caughtUp = true; });
-  events.onerror = () => { setLive(false); caughtUp = false; };
+  events.onopen = () => { reconnecting = false; renderBanner(); };
+  events.onerror = () => {
+    caughtUp = false;
+    reconnecting = events.readyState !== EventSource.CLOSED;
+    setLive(false);
+  };
 }
 
 // ---------- listen: the phone reads the captions aloud ----------
@@ -389,7 +537,8 @@ function setListening(on) {
     // iOS only lets a page speak once it has spoken inside a tap: start
     // with the last line, or a silent one before the talk begins.
     const last = [...segments.values()].sort((a, b) => a.id - b.id).at(-1);
-    if (last) speak(last);
+    const text = last && (last.lang === lang ? last.text : last.translations?.[lang]);
+    if (text) speak(text);
     if (!current) {
       const primer = new SpeechSynthesisUtterance(' ');
       primer.volume = 0;
@@ -409,11 +558,11 @@ function hush() {
   if (speech?.speaking || speech?.pending) speech.cancel();
 }
 
-function speak(seg) {
-  if (!listening) return;
-  const translated = seg.lang === lang ? seg.text : seg.translations?.[lang];
-  if (!translated) return; // never read a line in a language the reader did not pick
-  queue.push(translated);
+// speak reads text, which is always in the reader's language: never read a
+// line in a language the reader did not pick.
+function speak(text) {
+  if (!listening || !text) return;
+  queue.push(text);
   // Stay live: when the talk runs ahead of the voice, drop the oldest lines.
   while (queue.length > 3) queue.shift();
   if (!current) next();

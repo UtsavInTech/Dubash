@@ -1,9 +1,16 @@
+// Modified by the Dubash contributors: translations travel as their own
+// messages, only into languages someone reads; pause and end.
+
 package room
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,16 +27,18 @@ func (failTranslator) Translate(context.Context, string, string, string, []strin
 	return "", errors.New("boom")
 }
 
-func newRoom(t *testing.T, st *store.Store, tr translate.Translator) *Room {
+func newRoomWith(t *testing.T, cfg config.Room, st *store.Store, engine asr.Engine, tr translate.Translator) *Room {
 	t.Helper()
-	rm, err := New(
-		config.Room{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}},
-		Deps{ASR: asr.Fake{Every: 1}, Translator: tr, Store: st, Log: slog.New(slog.DiscardHandler)},
-	)
+	rm, err := New(cfg, Deps{ASR: engine, Translator: tr, Store: st, Log: slog.New(slog.DiscardHandler)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return rm
+}
+
+func newRoom(t *testing.T, st *store.Store, tr translate.Translator) *Room {
+	t.Helper()
+	return newRoomWith(t, config.Room{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}}, st, asr.Fake{Every: 1}, tr)
 }
 
 func newStore(t *testing.T) *store.Store {
@@ -49,11 +58,29 @@ func feed(audio chan<- []byte, secs int) {
 	close(audio)
 }
 
+// finals drains sub and returns the committed lines, with the
+// translations that arrived for them merged in (and their errors).
 func finals(sub <-chan Msg) []caption.Segment {
 	var out []caption.Segment
+	index := map[int]int{}
 	for len(sub) > 0 {
-		if m := <-sub; m.Event == "final" {
-			out = append(out, m.Data.(caption.Segment))
+		m := <-sub
+		switch d := m.Data.(type) {
+		case caption.Segment:
+			if m.Event != "final" {
+				continue
+			}
+			d.Translations = map[string]string{}
+			index[d.ID] = len(out)
+			out = append(out, d)
+		case caption.Translation:
+			if i, ok := index[d.Segment]; ok {
+				if d.Error != "" {
+					out[i].Error = d.Error
+				} else {
+					out[i].Translations[d.Lang] = d.Text
+				}
+			}
 		}
 	}
 	return out
@@ -73,7 +100,7 @@ func waitFor(t *testing.T, cond func() bool) {
 func TestRoomPublishesTranslatedFinals(t *testing.T) {
 	st := newStore(t)
 	rm := newRoom(t, st, translate.Fake{})
-	sub, _, cancel := rm.Hub().Subscribe(64)
+	sub, _, cancel := rm.Hub().Subscribe(64, "es", "")
 	defer cancel()
 
 	audio := make(chan []byte)
@@ -87,7 +114,7 @@ func TestRoomPublishesTranslatedFinals(t *testing.T) {
 		t.Fatalf("finals = %d, want 2", len(got))
 	}
 	first := got[0]
-	if first.ID != 0 || first.Room != "sala-a" || first.Lang != "en" || first.T0 != 0 || first.T1 != 1 ||
+	if first.ID != 0 || first.Room != "sala-a" || first.Lang != "en" || first.T0 != 0 || first.T1 != 1 || first.Epoch != 1 ||
 		first.Text != "Welcome to Nerdearla." || first.Translations["es"] != "[es] Welcome to Nerdearla." {
 		t.Fatalf("first = %+v", first)
 	}
@@ -95,11 +122,11 @@ func TestRoomPublishesTranslatedFinals(t *testing.T) {
 		t.Fatalf("second = %+v", got[1])
 	}
 	stored, _, _ := st.Load("sala-a")
-	if len(stored) != 2 {
-		t.Fatalf("stored = %d, want 2", len(stored))
+	if len(stored) != 2 || stored[0].Translations["es"] != "[es] Welcome to Nerdearla." {
+		t.Fatalf("stored = %+v", stored)
 	}
 	s := rm.Status()
-	if s.Live || s.Segments != 2 || s.Errors != 0 || s.LastSegmentAt.IsZero() {
+	if s.Live || s.Segments != 2 || s.Errors != 0 || s.LastSegmentAt.IsZero() || s.Translation["es"].N != 2 {
 		t.Fatalf("status = %+v", s)
 	}
 }
@@ -121,8 +148,9 @@ func TestRoomRejectsSecondOperator(t *testing.T) {
 }
 
 func TestRoomKeepsOriginalWhenTranslationFails(t *testing.T) {
-	rm := newRoom(t, newStore(t), failTranslator{})
-	sub, _, cancel := rm.Hub().Subscribe(64)
+	st := newStore(t)
+	rm := newRoom(t, st, failTranslator{})
+	sub, _, cancel := rm.Hub().Subscribe(64, "es", "")
 	defer cancel()
 	audio := make(chan []byte)
 	go feed(audio, 2)
@@ -134,6 +162,132 @@ func TestRoomKeepsOriginalWhenTranslationFails(t *testing.T) {
 	}
 	if s := rm.Status(); s.Errors != 2 || s.LastError == "" {
 		t.Fatalf("status = %+v", s)
+	}
+	if stored, _, _ := st.Load("sala-a"); len(stored) != 2 || stored[0].Error == "" || stored[0].Text == "" {
+		t.Fatalf("stored = %+v", stored)
+	}
+}
+
+// counting counts translations per target language.
+type counting struct {
+	mu sync.Mutex
+	n  map[string]int
+}
+
+func (c *counting) Translate(_ context.Context, text, _, dst string, _ []string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.n == nil {
+		c.n = map[string]int{}
+	}
+	c.n[dst]++
+	return "[" + dst + "] " + text, nil
+}
+
+// TestRoomTranslatesOnlyLanguagesBeingRead: audience size never multiplies
+// translations, and a language nobody reads costs nothing.
+func TestRoomTranslatesOnlyLanguagesBeingRead(t *testing.T) {
+	cfg := config.Room{ID: "hall", Source: "hi", Targets: []string{"en", "te", "kn"}, AlwaysTranslate: []string{"en"}}
+	c := &counting{}
+	st := newStore(t)
+	rm := newRoomWith(t, cfg, st, asr.Fake{Every: 1, Lines: map[string][]string{"hi": {"नमस्ते।", "धन्यवाद।"}}}, c)
+	for range 3 { // three Telugu readers
+		_, _, cancel := rm.Hub().Subscribe(64, "te", "")
+		defer cancel()
+	}
+	audio := make(chan []byte)
+	go feed(audio, 2)
+	if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+		t.Fatal(err)
+	}
+	if c.n["te"] != 2 || c.n["en"] != 2 || c.n["kn"] != 0 {
+		t.Fatalf("translations per language %v: want te 2 (once per line, not per reader), en 2 (always), kn 0", c.n)
+	}
+	stored, _, _ := st.Load("hall")
+	if len(stored) != 2 || len(stored[0].Translations) != 2 {
+		t.Fatalf("stored %+v", stored)
+	}
+	if l := rm.Status().Listeners; l["te"] != 3 {
+		t.Fatalf("listeners %v", l)
+	}
+}
+
+// slowLang delays one language and fails another.
+type slowLang struct{ delay time.Duration }
+
+func (s slowLang) Translate(ctx context.Context, text, _, dst string, _ []string) (string, error) {
+	switch dst {
+	case "te":
+		select {
+		case <-time.After(s.delay):
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	case "kn":
+		return "", errors.New("kn provider down")
+	}
+	return "[" + dst + "] " + text, nil
+}
+
+// TestRoomIsolatesLanguages: a slow language and a failing one do not
+// hold back the source lines or the other language, and each language
+// stays in order.
+func TestRoomIsolatesLanguages(t *testing.T) {
+	cfg := config.Room{ID: "hall", Source: "hi", Targets: []string{"en", "te", "kn"}}
+	lines := []string{"एक।", "दो।", "तीन।", "चार।"}
+	st := newStore(t)
+	rm := newRoomWith(t, cfg, st, asr.Fake{Every: 0.5, Lines: map[string][]string{"hi": lines}}, slowLang{delay: 300 * time.Millisecond})
+	en, _, c1 := rm.Hub().Subscribe(64, "en", "")
+	defer c1()
+	te, _, c2 := rm.Hub().Subscribe(64, "te", "")
+	defer c2()
+	kn, _, c3 := rm.Hub().Subscribe(64, "kn", "")
+	defer c3()
+
+	audio := make(chan []byte)
+	go feed(audio, 2)
+	start := time.Now()
+	if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+		t.Fatal(err)
+	}
+	_ = start
+
+	order := func(sub <-chan Msg, lang string) (sources, translated []int, errs int) {
+		for len(sub) > 0 {
+			m := <-sub
+			switch d := m.Data.(type) {
+			case caption.Segment:
+				sources = append(sources, d.ID)
+			case caption.Translation:
+				if d.Lang != lang {
+					t.Errorf("%s reader got %s", lang, d.Lang)
+				}
+				if d.Error != "" {
+					errs++
+				} else {
+					translated = append(translated, d.Segment)
+				}
+			}
+		}
+		return
+	}
+	src, enDone, _ := order(en, "en")
+	_, teDone, _ := order(te, "te")
+	_, knDone, knErrs := order(kn, "kn")
+	if !slices.Equal(src, []int{0, 1, 2, 3}) || !slices.Equal(enDone, src) || !slices.Equal(teDone, src) {
+		t.Fatalf("sources %v, en %v, te %v: every language complete and in order", src, enDone, teDone)
+	}
+	if len(knDone) != 0 || knErrs != 4 {
+		t.Fatalf("kn: %v done, %d errors", knDone, knErrs)
+	}
+	stored, _, _ := st.Load("hall")
+	if len(stored) != 4 || stored[3].Translations["te"] == "" || stored[3].Translations["en"] == "" || !strings.Contains(stored[3].Error, "kn provider down") {
+		t.Fatalf("stored %+v", stored)
+	}
+	for i, s := range stored {
+		if s.ID != i {
+			t.Fatalf("stored out of order: %+v", stored)
+		}
 	}
 }
 
@@ -148,13 +302,13 @@ func TestRoomResumesClockAndIDsFromStore(t *testing.T) {
 	if n := len(again.Hub().Recent()); n != 2 {
 		t.Fatalf("recent after reload = %d, want 2", n)
 	}
-	sub, _, cancel := again.Hub().Subscribe(64)
+	sub, _, cancel := again.Hub().Subscribe(64, "", "")
 	defer cancel()
 	audio = make(chan []byte)
 	go feed(audio, 1)
 	_ = again.Run(context.Background(), Transmission{}, audio)
 	got := finals(sub)
-	if len(got) != 1 || got[0].ID != 2 || got[0].T0 != 2 || got[0].T1 != 3 {
+	if len(got) != 1 || got[0].ID != 2 || got[0].T0 != 2 || got[0].T1 != 3 || got[0].Epoch != 2 {
 		t.Fatalf("after reload = %+v", got)
 	}
 }
@@ -179,20 +333,17 @@ func (g gated) Translate(ctx context.Context, text, _, dst string, _ []string) (
 	return "[" + dst + "] " + text, nil
 }
 
-func TestRoomKeepsCommittedTextOnTheLiveLineUntilPublished(t *testing.T) {
+// TestRoomPublishesSourceLineBeforeTranslation: a committed line reaches
+// readers of the original at once, not after the slowest translation.
+func TestRoomPublishesSourceLineBeforeTranslation(t *testing.T) {
 	release := make(gated)
-	rm, err := New(
-		config.Room{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}},
-		Deps{ASR: scripted{
+	rm := newRoomWith(t, config.Room{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}}, newStore(t),
+		scripted{
 			{Kind: asr.Interim, Text: "Welcome to Nerdearla. Today"},
 			{Kind: asr.Final, Text: "Welcome to Nerdearla."},
 			{Kind: asr.Interim, Text: "Today, we"},
-		}, Translator: release, Store: newStore(t), Log: slog.New(slog.DiscardHandler)},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sub, _, cancel := rm.Hub().Subscribe(64)
+		}, release)
+	sub, _, cancel := rm.Hub().Subscribe(64, "es", "")
 	defer cancel()
 	audio := make(chan []byte)
 	done := make(chan error, 1)
@@ -211,26 +362,102 @@ func TestRoomKeepsCommittedTextOnTheLiveLineUntilPublished(t *testing.T) {
 			}
 		}
 	}
-	text := func(m Msg) string { return m.Data.(map[string]string)["text"] }
+	text := func(m Msg) string { return m.Data.(caption.Interim).Text }
 
 	if m := next(); m.Event != "interim" || text(m) != "Welcome to Nerdearla. Today" {
 		t.Fatalf("got %+v", m)
 	}
-	// While the sentence is being translated it stays on the live line.
-	if m := next(); m.Event != "interim" || text(m) != "Welcome to Nerdearla. Today, we" {
+	if m := next(); m.Event != "final" || m.Data.(caption.Segment).Text != "Welcome to Nerdearla." || m.Seq == 0 {
+		t.Fatalf("got %+v", m)
+	}
+	if m := next(); m.Event != "interim" || text(m) != "Today, we" {
 		t.Fatalf("got %+v", m)
 	}
 	release <- struct{}{}
-	if m := next(); m.Event != "final" || m.Data.(caption.Segment).Text != "Welcome to Nerdearla." {
-		t.Fatalf("got %+v", m)
-	}
-	// Right after the final, the live line comes back without it.
-	if m := next(); m.Event != "interim" || text(m) != "Today, we" {
+	if m := next(); m.Event != "translation" || m.Data.(caption.Translation).Text != "[es] Welcome to Nerdearla." {
 		t.Fatalf("got %+v", m)
 	}
 	close(audio)
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// heard records the audio an engine receives.
+type heard struct{ bytes atomic.Int64 }
+
+func (h *heard) Run(ctx context.Context, _ asr.Config, audio <-chan []byte, _ chan<- asr.Event) error {
+	for chunk := range audio {
+		h.bytes.Add(int64(len(chunk)))
+	}
+	return nil
+}
+
+// TestPauseKeepsAudioFromTheRecognizer: nothing said while paused is
+// transcribed or billed.
+func TestPauseKeepsAudioFromTheRecognizer(t *testing.T) {
+	h := &heard{}
+	rm := newRoomWith(t, config.Room{ID: "a", Source: "hi", Targets: []string{"en"}}, newStore(t), h, translate.Fake{})
+	sub, _, cancel := rm.Hub().Subscribe(64, "", "")
+	defer cancel()
+	audio := make(chan []byte)
+	done := make(chan error, 1)
+	go func() { done <- rm.Run(context.Background(), Transmission{}, audio) }()
+	chunk := make([]byte, asr.BytesPerSecond/10)
+	audio <- chunk
+	rm.Pause()
+	for range 5 {
+		audio <- chunk
+	}
+	if st := rm.Status(); !st.Paused || !st.Live {
+		t.Fatalf("status %+v", st)
+	}
+	rm.Resume()
+	audio <- chunk
+	close(audio)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := h.bytes.Load(); got != int64(2*len(chunk)) {
+		t.Fatalf("recognizer heard %d bytes, want %d", got, 2*len(chunk))
+	}
+	var paused bool
+	for len(sub) > 0 {
+		if m := <-sub; m.Event == "status" && m.Data.(map[string]any)["paused"] == true {
+			paused = true
+		}
+	}
+	if !paused {
+		t.Fatal("viewers were not told about the pause")
+	}
+}
+
+func TestEndStopsTheTransmission(t *testing.T) {
+	rm := newRoom(t, newStore(t), translate.Fake{})
+	audio := make(chan []byte)
+	done := make(chan error, 1)
+	go func() { done <- rm.Run(context.Background(), Transmission{}, audio) }()
+	waitFor(t, func() bool { return rm.Status().Live })
+	rm.End()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrEnded) {
+			t.Fatalf("Run = %v, want ErrEnded", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not stop")
+	}
+	if st := rm.Status(); st.Live || !st.Ended {
+		t.Fatalf("status %+v", st)
+	}
+	// The next transmission starts a new epoch and clears ended.
+	audio = make(chan []byte)
+	go feed(audio, 1)
+	if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+		t.Fatal(err)
+	}
+	if st := rm.Status(); st.Ended || st.Epoch != 2 {
+		t.Fatalf("status %+v", st)
 	}
 }
 
@@ -240,7 +467,7 @@ func TestRoomKeepsCommittedTextOnTheLiveLineUntilPublished(t *testing.T) {
 func TestRunTranscribesTheSpokenLanguage(t *testing.T) {
 	st := newStore(t)
 	rm := newRoom(t, st, translate.Fake{})
-	sub, _, cancel := rm.Hub().Subscribe(64)
+	sub, _, cancel := rm.Hub().Subscribe(64, "en", "")
 	defer cancel()
 
 	audio := make(chan []byte)

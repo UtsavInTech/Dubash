@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -13,7 +13,7 @@
   <div class="viewer-bar only-mobile">
     <header class="header">
       <div class="header-inner">
-        <a class="back" href="/" data-i18n="back">‹ Salas</a>
+        <a class="back" href="/" data-i18n="back">‹ Events</a>
         <span id="title" class="title"></span>
         <span id="status" class="status">…</span>
       </div>
@@ -21,8 +21,8 @@
     <div class="controls">
       <div id="langs" class="langs" role="group" data-i18n-label="language"></div>
       <div class="actions">
-        <button id="listen" class="button secondary listen" type="button" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="waves" d="M16 8.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span data-i18n="listen">Escuchar</span></button>
-        <button id="prefs-open" class="button secondary" type="button" aria-haspopup="dialog" data-i18n="settings-short">Ajustes</button>
+        <button id="listen" class="button secondary listen" type="button" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="waves" d="M16 8.5a4.5 4.5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span data-i18n="listen">Listen</span></button>
+        <button id="prefs-open" class="button secondary" type="button" aria-haspopup="dialog" data-i18n="settings-short">Settings</button>
       </div>
     </div>
   </div>
@@ -31,7 +31,9 @@
 
   <main id="main" class="stage">
     <section id="captions" data-i18n-label="captions">
-      <p id="empty" class="empty" hidden><strong data-i18n="waiting-title">Todavía no hay subtítulos</strong><span data-i18n="waiting">Van a aparecer acá apenas empiece la charla.</span></p>
+      <p id="welcome" class="welcome only-mobile" hidden></p>
+      <p id="banner" class="banner" role="status" hidden></p>
+      <p id="empty" class="empty" hidden><strong data-i18n="waiting-title">No captions yet</strong><span data-i18n="waiting">They will show up here as soon as the speaker starts.</span></p>
       <div id="lines" aria-live="polite"></div>
       <p id="interim" aria-hidden="true"></p>
     </section>
@@ -39,24 +41,24 @@
 
   <aside id="qr" class="qr only-screen" hidden>
     <img alt="" width="200" height="200">
-    <p data-i18n="scan">Escaneá para leer en tu idioma</p>
+    <p data-i18n="scan">Scan to read in your language</p>
   </aside>
 
-  <button id="follow" class="button follow" type="button" hidden data-i18n="follow">↓ Ir a lo último</button>
+  <button id="follow" class="button follow" type="button" hidden data-i18n="follow">↓ Jump to latest</button>
 
   <footer class="downloads only-mobile">
-    <h2 data-i18n="download">Descargar la transcripción</h2>
+    <h2 data-i18n="download">Download the transcript</h2>
     <div id="exports"></div>
   </footer>
 
   <dialog id="prefs" class="settings" aria-labelledby="prefs-title">
     <form method="dialog">
       <div class="dialog-head">
-        <h2 id="prefs-title" data-i18n="settings">Ajustes de lectura</h2>
-        <button class="button secondary" value="close" data-i18n="close">Cerrar</button>
+        <h2 id="prefs-title" data-i18n="settings">Reading settings</h2>
+        <button class="button secondary" value="close" data-i18n="close">Close</button>
       </div>
       <fieldset>
-        <legend data-i18n="size">Tamaño del texto</legend>
+        <legend data-i18n="size">Text size</legend>
         <div id="sizes" class="sizes">
           <button type="button" data-size="0" data-i18n-label="size-0" style="font-size:1rem">A</button>
           <button type="button" data-size="1" data-i18n-label="size-1" style="font-size:1.25rem">A</button>
@@ -65,16 +67,16 @@
         </div>
       </fieldset>
       <fieldset>
-        <legend data-i18n="colors">Colores</legend>
-        <label class="radio"><input type="radio" name="theme" value="auto"><span data-i18n="theme-auto">Como el dispositivo</span></label>
-        <label class="radio"><input type="radio" name="theme" value="light"><span data-i18n="theme-light">Fondo claro</span></label>
-        <label class="radio"><input type="radio" name="theme" value="dark"><span data-i18n="theme-dark">Fondo oscuro</span></label>
-        <label class="radio"><input type="radio" name="theme" value="contrast"><span><span data-i18n="theme-contrast">Alto contraste</span><small data-i18n="theme-contrast-hint">Blanco y amarillo sobre negro</small></span></label>
+        <legend data-i18n="colors">Colours</legend>
+        <label class="radio"><input type="radio" name="theme" value="auto"><span data-i18n="theme-auto">Same as my device</span></label>
+        <label class="radio"><input type="radio" name="theme" value="light"><span data-i18n="theme-light">Light background</span></label>
+        <label class="radio"><input type="radio" name="theme" value="dark"><span data-i18n="theme-dark">Dark background</span></label>
+        <label class="radio"><input type="radio" name="theme" value="contrast"><span><span data-i18n="theme-contrast">High contrast</span><small data-i18n="theme-contrast-hint">White and yellow on black</small></span></label>
       </fieldset>
       <fieldset>
-        <legend data-i18n="text">Texto</legend>
-        <label class="checkbox"><input type="checkbox" id="pref-spacing"><span><span data-i18n="spacing">Más espacio entre letras y líneas</span><small data-i18n="spacing-hint">Puede ayudar con dislexia o baja visión</small></span></label>
-        <label class="checkbox" id="orig-row"><input type="checkbox" id="pref-orig"><span data-i18n="show-original">Mostrar el original debajo de la traducción</span></label>
+        <legend data-i18n="text">Text</legend>
+        <label class="checkbox"><input type="checkbox" id="pref-spacing"><span><span data-i18n="spacing">More space between letters and lines</span><small data-i18n="spacing-hint">Can help with dyslexia or low vision</small></span></label>
+        <label class="checkbox" id="orig-row"><input type="checkbox" id="pref-orig"><span data-i18n="show-original">Show the original under the translation</span></label>
       </fieldset>
     </form>
   </dialog>

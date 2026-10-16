@@ -1,3 +1,4 @@
+// Modified by the Dubash contributors: English text, speaker and states.
 import { NAMES, el } from './langs.js';
 
 function langItem(room, l) {
@@ -5,18 +6,20 @@ function langItem(room, l) {
     el('a', { className: 'lang-link', href: `/r/${room.id}?lang=${l}`, lang: l },
       el('span', {},
         el('strong', { textContent: NAMES[l] ?? l }),
-        el('small', { lang: 'es', textContent: l === room.source ? 'Idioma original' : 'Traducción automática' }))));
+        el('small', { lang: 'en', textContent: l === room.source ? 'Spoken language' : 'Automatic translation' }))));
 }
 
 function entry(room) {
-  const status = el('span', { className: room.live ? 'status live' : 'status', textContent: room.live ? 'En vivo' : 'Sin transmisión' });
+  const label = room.ended ? 'Ended' : room.paused ? 'Paused' : room.live ? 'Live' : 'Not streaming';
+  const status = el('span', { className: room.live && !room.paused ? 'status live' : 'status', textContent: label });
   const targets = room.targets.map((l) => NAMES[l] ?? l);
-  const now = room.live && room.talkTitle ? `Ahora: ${room.talkTitle}. ` : '';
-  const meta = `${now}Se habla en ${NAMES[room.source]}` + (targets.length ? `. Traducción a ${targets.join(' y ')}.` : '.');
+  const now = room.live && room.talkTitle ? `Now: ${room.talkTitle}. ` : '';
+  const who = room.speaker ? `Speaker: ${room.speaker}. ` : '';
+  const meta = `${now}${who}Spoken in ${NAMES[room.source]}` + (targets.length ? `. Translated into ${targets.join(', ')}.` : '.');
   return el('li', { className: 'room' },
     el('div', { className: 'room-head' }, el('h2', { textContent: room.title }), status),
     el('p', { className: 'room-meta', textContent: meta }),
-    el('ul', { className: 'lang-list', ariaLabel: `Idiomas de ${room.title}` },
+    el('ul', { className: 'lang-list', ariaLabel: `Languages of ${room.title}` },
       ...[room.source, ...room.targets].map((l) => langItem(room, l))));
 }
 

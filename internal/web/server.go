@@ -84,6 +84,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /qr/{room}", s.qr)
 	mux.HandleFunc("GET /api/admin/status", s.auth(s.adminStatus))
 	mux.HandleFunc("POST /api/admin/rooms/{room}/talks", s.auth(s.newTalk))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/pause", s.auth(s.control(func(rm *room.Room) { rm.Pause() })))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/resume", s.auth(s.control(func(rm *room.Room) { rm.Resume() })))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/end", s.auth(s.control(func(rm *room.Room) { rm.End() })))
 	mux.HandleFunc("GET /metrics", s.auth(s.metrics))
 	mux.HandleFunc("GET /events/{room}", s.events)
 	mux.HandleFunc("GET /ingest/{room}", s.auth(s.ingest))
@@ -149,9 +152,12 @@ func (s *Server) room(w http.ResponseWriter, r *http.Request) (*room.Room, bool)
 type roomInfo struct {
 	ID        string   `json:"id"`
 	Title     string   `json:"title"`
+	Speaker   string   `json:"speaker,omitempty"`
 	Source    string   `json:"source"`
 	Targets   []string `json:"targets"`
 	Live      bool     `json:"live"`
+	Paused    bool     `json:"paused,omitempty"`
+	Ended     bool     `json:"ended,omitempty"`
 	TalkTitle string   `json:"talkTitle,omitempty"`
 }
 
@@ -159,7 +165,8 @@ func (s *Server) listRooms(w http.ResponseWriter, _ *http.Request) {
 	out := make([]roomInfo, 0, len(s.order))
 	for _, rm := range s.order {
 		st := rm.Status()
-		out = append(out, roomInfo{ID: st.ID, Title: st.Title, Source: st.Source, Targets: st.Targets, Live: st.Live, TalkTitle: st.TalkTitle})
+		out = append(out, roomInfo{ID: st.ID, Title: st.Title, Speaker: st.Speaker, Source: st.Source, Targets: st.Targets,
+			Live: st.Live, Paused: st.Paused, Ended: st.Ended, TalkTitle: st.TalkTitle})
 	}
 	writeJSON(w, out)
 }
@@ -243,11 +250,24 @@ func writeJSON(w http.ResponseWriter, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-// events streams a room's captions with Server-Sent Events.
+// events streams a room's captions with Server-Sent Events. The lang
+// parameter is the language the viewer reads: it receives the committed
+// source lines, their translations into lang (which starts translating
+// lang if nobody else reads it), and the live line. Committed messages
+// carry SSE ids, so a reconnecting browser (which sends Last-Event-ID on
+// its own) receives exactly what it missed.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	rm, ok := s.room(w, r)
 	if !ok {
 		return
+	}
+	lang := r.URL.Query().Get("lang")
+	if !slices.Contains(rm.Config().Languages(), lang) {
+		lang = ""
+	}
+	lastID := r.Header.Get("Last-Event-ID")
+	if lastID == "" {
+		lastID = r.URL.Query().Get("after")
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -259,11 +279,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-cache")
 	h.Set("X-Accel-Buffering", "no")
 
-	msgs, recent, cancel := rm.Hub().Subscribe(64)
+	hub := rm.Hub()
+	msgs, replay, cancel := hub.Subscribe(64, lang, lastID)
 	defer cancel()
 	writeEvent(w, "status", rm.StatusEvent())
-	for _, seg := range recent {
-		writeEvent(w, "final", seg)
+	for _, m := range replay {
+		writeMsg(w, m, hub.Instance())
 	}
 	// Marks the end of the replay, so an overlay can show only new lines.
 	writeEvent(w, "caught-up", struct{}{})
@@ -279,7 +300,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return // dropped for falling behind; the browser reconnects
 			}
-			if writeEvent(w, m.Event, m.Data) != nil {
+			if writeMsg(w, m, hub.Instance()) != nil {
 				return
 			}
 			flusher.Flush()
@@ -292,6 +313,30 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// writeMsg writes a hub message, with its id when it has one.
+func writeMsg(w io.Writer, m room.Msg, instance string) error {
+	if id := m.ID(instance); id != "" {
+		if _, err := fmt.Fprintf(w, "id: %s\n", id); err != nil {
+			return err
+		}
+	}
+	return writeEvent(w, m.Event, m.Data)
+}
+
+// control runs an action on a room from the panel or the operator console
+// and answers with the room's status.
+func (s *Server) control(action func(*room.Room)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rm, ok := s.room(w, r)
+		if !ok {
+			return
+		}
+		action(rm)
+		s.log.Info("room control", "room", rm.Config().ID, "action", r.URL.Path)
+		writeJSON(w, rm.Status())
+	}
+}
+
 func writeEvent(w io.Writer, event string, data any) error {
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -300,6 +345,10 @@ func writeEvent(w io.Writer, event string, data any) error {
 	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
 	return err
 }
+
+// StatusEventEnded closes an operator's socket when the event was ended
+// from the panel: clients must not reconnect on their own.
+const StatusEventEnded websocket.StatusCode = 4001
 
 // defaultDrainGrace covers the ASR engine's own drain after the audio
 // ends; pipelines still running after it are cancelled.
@@ -425,6 +474,8 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(runErr, room.ErrBusy):
 		c.Close(websocket.StatusPolicyViolation, "room busy")
+	case errors.Is(runErr, room.ErrEnded):
+		c.Close(StatusEventEnded, "event ended")
 	case runErr != nil && !errors.Is(runErr, context.Canceled):
 		s.log.Error("room session failed", "room", id, "err", runErr)
 		c.Close(websocket.StatusInternalError, closeReason(runErr))

@@ -1,64 +1,66 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Operación · Dubash</title>
+  <title>Console · Dubash</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/static/fonts/inclusive-sans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="/static/js/prefs.js"></script>
 </head>
 <body data-mode="console">
-  <a class="skip" href="#main">Saltar al contenido</a>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="header">
     <div class="header-inner">
       <a class="brand" href="/"><svg viewBox="0 0 30 22" aria-hidden="true"><rect x="1" y="1" width="28" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="10" width="11" height="3" fill="currentColor"/><rect x="19" y="10" width="5" height="3" fill="currentColor"/><rect x="6" y="15" width="18" height="3" fill="currentColor"/></svg>Dubash</a>
-      <span class="header-section">Operación</span>
+      <span class="header-section">Speaker console</span>
       <span class="spacer"></span>
-      <span id="status" class="status" role="status">Detenido</span>
+      <span id="status" class="status" role="status">Stopped</span>
     </div>
   </header>
   <main id="main" class="container">
-    <h1 id="title">Sala</h1>
+    <h1 id="title">Event</h1>
     <div class="console">
       <section aria-labelledby="source-title">
-        <h2 id="source-title">Fuente de audio</h2>
-        <label class="field"><span>Token de operación</span>
+        <h2 id="source-title">Audio source</h2>
+        <label class="field"><span>Admin token</span>
           <input id="token" type="password" autocomplete="off"></label>
-        <label class="field"><span>Idioma que se habla en el escenario</span>
+        <label class="field"><span>Language the speaker uses</span>
           <select id="spoken"></select>
           <span id="spoken-hint" class="hint"></span></label>
-        <label class="field"><span>Charla (opcional)</span>
+        <label class="field"><span>Session title (optional)</span>
           <input id="talk" type="text" autocomplete="off" maxlength="200">
-          <span class="hint">Un título nuevo empieza una charla nueva: la transcripción de cada charla se descarga por separado.</span></label>
+          <span class="hint">A new title starts a new session: each session's transcript downloads separately.</span></label>
         <div class="row">
-          <select id="source" aria-label="Fuente de audio"><option value="file">Archivo de audio</option></select>
-          <button id="detect" class="button secondary" type="button">Detectar micrófonos</button>
+          <select id="source" aria-label="Audio source"><option value="file">Audio file</option></select>
+          <button id="detect" class="button secondary" type="button">Find microphones</button>
         </div>
         <div id="file-row">
           <div class="row"><input id="file" type="file" accept="audio/*,video/*"></div>
-          <p class="hint">O probá con una muestra: <span><a href="#" data-sample="en">en inglés</a></span> <span>· <a href="#" data-sample="es">en español</a></span></p>
+          <p class="hint">Or try a sample: <span><a href="#" data-sample="en">English</a></span> <span>· <a href="#" data-sample="es">Spanish</a></span></p>
         </div>
         <audio id="player" controls hidden></audio>
         <div class="transport">
-          <button id="start" class="button go" type="button">Transmitir</button>
-          <button id="stop" class="button secondary" type="button" disabled>Detener</button>
+          <button id="start" class="button go" type="button">Go live</button>
+          <button id="pause" class="button secondary" type="button" disabled aria-pressed="false">Pause</button>
+          <button id="stop" class="button secondary" type="button" disabled>Stop</button>
           <span id="sent" class="hint"></span>
         </div>
-        <p class="hint" id="level-label">Nivel de entrada</p>
+        <p class="hint" id="level-label">Input level</p>
         <div class="meter" role="presentation" aria-labelledby="level-label"><div id="level"></div></div>
         <p id="error" class="error" role="alert"></p>
         <details class="help">
-          <summary>Transmitir sin navegador, desde el stream del escenario</summary>
-          <p>Para dejar una sala corriendo sin supervisión, tomá el audio del mixer o del stream con <code>dubash-ingest</code> (usa ffmpeg y se reconecta solo):</p>
+          <summary>Send the mixer's feed without a browser</summary>
+          <p>To run an event unattended from the venue mixer or a stream, use <code>dubash-ingest</code> (it uses ffmpeg and reconnects by itself):</p>
           <pre class="cli" id="cli"></pre>
         </details>
       </section>
       <section aria-labelledby="monitor-title">
-        <h2 id="monitor-title">Vista previa (idioma original)</h2>
+        <h2 id="monitor-title">Live transcript (spoken language)</h2>
         <div id="captions" class="monitor"><div id="lines"></div><p id="interim"></p></div>
-        <h2>Enlaces de la sala</h2>
+        <p id="audience" class="hint" aria-live="polite"></p>
+        <h2>Links for this event</h2>
         <ul id="links" class="link-list"></ul>
       </section>
     </div>

@@ -1,7 +1,12 @@
+// Modified by the Dubash contributors: English, pause, end of event,
+// listeners per language.
+import { NAMES } from './langs.js';
+
 const roomId = decodeURIComponent(location.pathname.split('/').pop());
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
-const NAMES = { en: 'inglés', es: 'español', pt: 'portugués', fr: 'francés', de: 'alemán', it: 'italiano' };
+// The console's own close code when the event was ended from the panel.
+const EVENT_ENDED = 4001;
 let languages = [];
 
 function storedToken() {
@@ -29,12 +34,12 @@ async function detect() {
     s.getTracks().forEach((t) => t.stop());
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
     const select = $('source');
-    select.replaceChildren(new Option('Archivo de audio', 'file'),
-      ...devices.map((d, i) => new Option(`Micrófono: ${d.label || `entrada ${i + 1}`}`, d.deviceId)));
+    select.replaceChildren(new Option('Audio file', 'file'),
+      ...devices.map((d, i) => new Option(`Microphone: ${d.label || `input ${i + 1}`}`, d.deviceId)));
     select.value = devices[0]?.deviceId ?? 'file';
     toggleFileRow();
   } catch (e) {
-    $('error').textContent = `No se pudo acceder al micrófono: ${e.message}`;
+    $('error').textContent = `Could not use the microphone: ${e.message}`;
   }
 }
 
@@ -66,7 +71,7 @@ async function start() {
   storeToken(token);
   const isFile = $('source').value === 'file';
   player = $('player');
-  if (isFile && !player.src) return fail('Elegí un archivo de audio, o tocá "Detectar micrófonos" y elegí un micrófono en la lista.');
+  if (isFile && !player.src) return fail('Choose an audio file, or press "Find microphones" and pick a microphone from the list.');
 
   try {
     ctx = new AudioContext({ sampleRate: 16000 });
@@ -102,16 +107,19 @@ async function start() {
   sock.binaryType = 'arraybuffer';
   sock.onopen = () => {
     if (sock !== ws) return;
-    setStatus('En vivo', true);
+    setStatus('Live', true);
     $('stop').disabled = false;
+    $('pause').disabled = false;
+    setPaused(false);
     if (isFile) player.play();
   };
   sock.onclose = (e) => {
     if (sock !== ws) return;
-    if (e.code === 1008) fail('Otra persona ya está transmitiendo en esta sala.');
-    else if (e.code === 1006 && sentBytes === 0) fail('No se pudo conectar: revisá el token o si la sala ya está en uso.');
-    else if (e.code === 1006) fail('Se cortó la conexión con el servidor.');
-    else if (e.code !== 1000) fail(`La transcripción falló: ${e.reason || `código ${e.code}`}`);
+    if (e.code === 1008) fail('Someone else is already live in this event.');
+    else if (e.code === EVENT_ENDED) fail('The event was ended from the admin panel.');
+    else if (e.code === 1006 && sentBytes === 0) fail('Could not connect: check the token, or whether the event is already live.');
+    else if (e.code === 1006) fail('The connection to the server was lost.');
+    else if (e.code !== 1000) fail(`Recognition failed: ${e.reason || `code ${e.code}`}`);
     else stop();
   };
   sentBytes = 0;
@@ -119,7 +127,7 @@ async function start() {
     if (sock !== ws || sock.readyState !== WebSocket.OPEN) return;
     sock.send(e.data);
     sentBytes += e.data.byteLength;
-    $('sent').textContent = `${(sentBytes / 32000).toFixed(0)} s enviados`;
+    $('sent').textContent = `${(sentBytes / 32000).toFixed(0)} s sent`;
     const pcm = new Int16Array(e.data);
     let sum = 0;
     for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
@@ -127,6 +135,40 @@ async function start() {
     $('level').style.clipPath = `inset(0 ${100 - Math.min(100, rms * 300)}% 0 0)`;
   };
   if (isFile) player.onended = () => stop();
+}
+
+// Pause keeps the microphone connected but sends nothing to recognition:
+// nothing said meanwhile is captioned, stored or billed.
+let paused = false;
+function setPaused(on) {
+  paused = on;
+  $('pause').textContent = on ? 'Resume' : 'Pause';
+  $('pause').setAttribute('aria-pressed', String(on));
+  if (ws) setStatus(on ? 'Paused' : 'Live', !on);
+}
+
+async function control(action) {
+  const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/${action}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` },
+  });
+  if (!res.ok) throw new Error(res.status === 401 ? 'The admin token was rejected.' : `${action} failed: ${res.status}`);
+  setPaused((await res.json()).paused);
+}
+
+// audience shows how many people read each language, and how fast.
+async function audience() {
+  const token = $('token').value.trim();
+  if (!token) return;
+  try {
+    const res = await fetch('/api/admin/status', { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    const st = (await res.json()).find((r) => r.id === roomId);
+    if (!st) return;
+    const per = Object.entries(st.listeners ?? {}).filter(([l]) => l).map(([l, n]) => `${NAMES[l] ?? l} ${n}`);
+    const lag = Object.entries(st.translation ?? {}).map(([l, v]) => `${NAMES[l] ?? l} ${(v.p50 / 1000).toFixed(1)} s`);
+    $('audience').textContent = `Readers: ${st.viewers}${per.length ? ` (${per.join(', ')})` : ''}.` +
+      (lag.length ? ` Translation delay (median): ${lag.join(', ')}.` : '');
+  } catch { /* the next poll retries */ }
 }
 
 function stop() {
@@ -145,12 +187,14 @@ function stop() {
   $('spoken').disabled = false;
   $('talk').disabled = false;
   $('stop').disabled = true;
-  setStatus('Detenido');
+  $('pause').disabled = true;
+  setPaused(false);
+  setStatus('Stopped');
   if ($('source').value === 'file' && $('player').src) loadFile($('player').src);
 }
 
-// The language spoken on stage decides what Gemini transcribes; the room's
-// other languages become the translations.
+// The language spoken decides what the recognizer listens for; the
+// event's other languages become the translations.
 function setSpoken(lang) {
   if (!languages.includes(lang)) return;
   $('spoken').value = lang;
@@ -159,13 +203,16 @@ function setSpoken(lang) {
 
 function showTranslations() {
   const others = languages.filter((l) => l !== $('spoken').value).map((l) => NAMES[l] ?? l);
+  const spoken = NAMES[$('spoken').value] ?? $('spoken').value;
   $('spoken-hint').textContent = others.length
-    ? `Se transcribe en ${NAMES[$('spoken').value]} y se traduce a ${others.join(' y ')}.`
-    : `Se transcribe en ${NAMES[$('spoken').value]}.`;
+    ? `Recognized in ${spoken}, translated into ${others.join(', ')} while someone reads them.`
+    : `Recognized in ${spoken}.`;
 }
 
 function preview(room) {
   const lines = $('lines');
+  // The console reads the spoken language only: it never starts a
+  // translation.
   const events = new EventSource(`/events/${encodeURIComponent(roomId)}`);
   events.addEventListener('final', (e) => {
     const seg = JSON.parse(e.data);
@@ -178,10 +225,10 @@ function preview(room) {
   events.addEventListener('interim', (e) => { $('interim').textContent = JSON.parse(e.data).text; });
   const main = room.targets[0] ?? room.source;
   const outputs = [
-    ['Vista del público', 'Para celulares', `/r/${roomId}?lang=${main}`],
-    ['Pantalla del escenario', 'Para el proyector, con código QR', `/r/${roomId}?lang=${main}&mode=screen`],
-    ['Overlay para OBS o vMix', 'Browser Source con fondo transparente', `/r/${roomId}?lang=${main}&mode=overlay`],
-    ['Cartel con QR', 'A4 para imprimir', `/posters?room=${roomId}`],
+    ['Audience page', 'For phones', `/r/${roomId}?lang=${main}`],
+    ['Stage screen', 'For the projector, with the QR code', `/r/${roomId}?lang=${main}&mode=screen`],
+    ['OBS or vMix overlay', 'Browser Source with a transparent background', `/r/${roomId}?lang=${main}&mode=overlay`],
+    ['QR poster', 'A4, to print', `/posters?room=${roomId}`],
   ];
   $('links').replaceChildren(...outputs.map(([label, note, href]) => {
     const li = document.createElement('li');
@@ -202,10 +249,10 @@ function preview(room) {
 // the worklet and the microphone API.
 function unsupported() {
   if (!window.isSecureContext) {
-    return 'Esta consola necesita una conexión segura: abrila por https (el túnel) o desde http://localhost, no por la IP de la red.';
+    return 'This console needs a secure connection: open it over https (your tunnel) or at http://localhost, not at the network IP address.';
   }
   if (!window.AudioWorkletNode || !navigator.mediaDevices) {
-    return 'Este navegador no puede capturar audio: usá Chrome o Edge actualizados.';
+    return 'This browser cannot capture audio: use an up-to-date Chrome or Edge.';
   }
   return '';
 }
@@ -220,14 +267,14 @@ async function main() {
   const rooms = await (await fetch('/api/rooms')).json();
   const room = rooms.find((r) => r.id === roomId);
   if (!room) {
-    $('error').textContent = 'Sala no encontrada.';
+    $('error').textContent = 'Event not found.';
     $('start').disabled = true;
     return;
   }
-  document.title = `Operación · ${room.title}`;
-  $('title').textContent = `Operación: ${room.title}`;
+  document.title = `Console · ${room.title}`;
+  $('title').textContent = room.title;
   languages = [room.source, ...room.targets];
-  $('spoken').replaceChildren(...languages.map((l) => new Option(NAMES[l][0].toUpperCase() + NAMES[l].slice(1), l)));
+  $('spoken').replaceChildren(...languages.map((l) => new Option(NAMES[l] ?? l, l)));
   $('spoken').value = room.source;
   $('spoken').onchange = showTranslations;
   showTranslations();
@@ -245,6 +292,8 @@ async function main() {
   }
   $('start').onclick = () => start().catch((e) => fail(e.message));
   $('stop').onclick = stop;
+  $('pause').onclick = () => control(paused ? 'resume' : 'pause').catch((e) => { $('error').textContent = e.message; });
+  setInterval(audience, 3000);
   toggleFileRow();
 }
 

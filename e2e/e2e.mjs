@@ -21,7 +21,7 @@ const get = async (path, opts) => fetch(BASE + path, opts);
 // ---------- HTTP surface ----------
 check('healthz', (await (await get('/healthz')).text()).trim() === 'ok');
 const rooms = await (await get('/api/rooms')).json();
-check('api/rooms lists 2 rooms', rooms.length === 2, rooms.map((r) => r.id).join(','));
+check('api/rooms lists 3 rooms', rooms.length === 3, rooms.map((r) => r.id).join(','));
 check('admin status needs token', (await get('/api/admin/status')).status === 401);
 check('metrics needs token', (await get('/metrics')).status === 401);
 check('metrics with bearer token', (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).status === 200);
@@ -200,11 +200,50 @@ await sleep(4000);
 const after = (await (await get('/api/rooms/sala-b/talks')).json()).length;
 check('new talk starts a talk', nt.ok ? after === before + 1 : true, `${before} → ${after}`);
 
+// ---------- India: a Hindi event read in Telugu (added by the Dubash contributors) ----------
+const hiFeed = spawn(`${BIN}/dubash-ingest`, ['-server', BASE, '-room', 'hall-hi', '-lang', 'hi', '-realtime'], {
+  env: { ...process.env, ADMIN_TOKEN: TOKEN }, stdio: ['pipe', 'ignore', 'pipe'],
+});
+hiFeed.stdin.on('error', () => {}); // it stops reading when the event is ended
+hiFeed.stdin.end(Buffer.alloc(16000 * 2 * 60));
+const tel = await phone.newPage();
+tel.on('pageerror', (e) => errors.push(`telugu: ${e.message}`));
+await tel.goto(`${BASE}/r/hall-hi?lang=te`);
+check('Telugu UI', (await tel.textContent('#prefs-open')).trim() === 'సెట్టింగ్‌లు');
+check('welcome names the event and speaker', (await tel.textContent('#welcome')).includes('हिन्दी सभा') && (await tel.textContent('#welcome')).includes('Test Speaker'));
+await tel.waitForFunction(() => [...document.querySelectorAll('#lines p')].some((p) => p.textContent.startsWith('[te] ')), null, { timeout: 15000 })
+  .then(() => check('Hindi line arrives translated into Telugu', true))
+  .catch(async () => check('Hindi line arrives translated into Telugu', false, await tel.textContent('#lines')));
+const teluguFont = await tel.evaluate(async () => {
+  await document.fonts.ready;
+  return performance.getEntriesByType('resource').some((e) => e.name.endsWith('/noto-sans-telugu.woff2'));
+});
+check('Telugu font served from the binary', teluguFont);
+const devanagariOnly = await tel.evaluate(() => performance.getEntriesByType('resource').filter((e) => e.name.includes('noto-sans-')).map((e) => e.name.split('/').pop()));
+check('only the scripts on screen are downloaded', !devanagariOnly.includes('noto-sans-tamil.woff2'), devanagariOnly.join(','));
+const ctl = (action) => get(`/api/admin/rooms/hall-hi/${action}`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}` } });
+await tel.waitForFunction(() => document.getElementById('status').classList.contains('live'), null, { timeout: 10000 }).catch(() => {});
+await ctl('pause');
+await tel.waitForFunction(() => !document.getElementById('banner').hidden, null, { timeout: 5000 })
+  .then(async () => check('paused banner in Telugu', (await tel.textContent('#banner')).includes('ఆపివేయబడింది')))
+  .catch(() => check('paused banner in Telugu', false));
+await ctl('resume');
+await tel.waitForFunction(() => document.getElementById('banner').hidden, null, { timeout: 5000 })
+  .then(() => check('banner gone after resume', true)).catch(() => check('banner gone after resume', false));
+await ctl('end');
+await tel.waitForFunction(() => document.getElementById('banner').textContent.includes('కార్యక్రమం ముగిసింది'), null, { timeout: 5000 })
+  .then(() => check('ended page', true)).catch(async () => check('ended page', false, await tel.textContent('#banner')));
+await new Promise((r) => { if (hiFeed.exitCode !== null) r(); else hiFeed.on('exit', r); });
+check('ending the event stops dubash-ingest', hiFeed.exitCode !== 0);
+const admStatus = await (await get('/api/admin/status', { headers: { Authorization: `Bearer ${TOKEN}` } })).json();
+const hall = admStatus.find((r) => r.id === 'hall-hi');
+check('admin counts Telugu readers', (hall?.listeners?.te ?? 0) >= 1, JSON.stringify(hall?.listeners));
+
 // Posters.
 const pst = await ctx.newPage();
 await pst.goto(`${BASE}/posters`);
 await pst.waitForSelector('img[src*="/qr/"]');
-check('posters: one QR per room', (await pst.$$('img[src*="/qr/"]')).length === 2);
+check('posters: one QR per room', (await pst.$$('img[src*="/qr/"]')).length === 3);
 
 // Metrics after traffic.
 const metrics = await (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).text();

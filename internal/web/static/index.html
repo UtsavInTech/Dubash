@@ -1,34 +1,35 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Subtítulos en vivo · Dubash</title>
+  <title>Live captions · Dubash</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/static/fonts/inclusive-sans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="/static/js/prefs.js"></script>
 </head>
 <body data-mode="mobile">
-  <a class="skip" href="#main">Saltar al contenido</a>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="header">
     <div class="header-inner">
       <a class="brand" href="/"><svg viewBox="0 0 30 22" aria-hidden="true"><rect x="1" y="1" width="28" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="10" width="11" height="3" fill="currentColor"/><rect x="19" y="10" width="5" height="3" fill="currentColor"/><rect x="6" y="15" width="18" height="3" fill="currentColor"/></svg>Dubash</a>
-      <span class="header-section">Subtítulos en vivo</span>
+      <span class="header-section">Live captions</span>
       <span class="spacer"></span>
     </div>
   </header>
   <main id="main" class="container">
     <div class="intro">
-      <h1>Subtítulos en vivo</h1>
-      <p>Elegí la sala y el idioma en el que querés leer la charla. El texto aparece mientras la persona habla.</p>
+      <h1>Live captions</h1>
+      <p>Choose the event and the language you want to read it in. The words appear on your phone as the speaker talks.</p>
+      <p lang="hi">कार्यक्रम और अपनी भाषा चुनें। वक्ता के बोलते ही शब्द आपके फ़ोन पर दिखेंगे।</p>
     </div>
     <ul id="rooms" class="rooms" aria-live="polite"></ul>
   </main>
   <footer class="footer">
     <div class="container">
-      <p>Los subtítulos y las traducciones se generan automáticamente y pueden tener errores.</p>
-      <p><a href="/posters">Carteles con QR</a> · <a href="/admin">Panel de producción</a> · <a href="https://github.com/UtsavInTech/dubash">Código fuente</a> (Apache-2.0)</p>
+      <p>Captions and translations are made automatically and may contain mistakes.</p>
+      <p><a href="/posters">QR posters</a> · <a href="/admin">Admin</a> · <a href="https://github.com/UtsavInTech/dubash">Source code</a> (Apache-2.0)</p>
     </div>
   </footer>
   <script type="module" src="/static/js/index.js"></script>

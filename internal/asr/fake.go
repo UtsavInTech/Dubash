@@ -10,6 +10,10 @@ var DefaultLines = map[string][]string{
 	"fr": {"Bienvenue à Nerdearla.", "Aujourd'hui, nous allons parler d'open source.", "Ces sous-titres sont générés en direct."},
 	"de": {"Willkommen bei Nerdearla.", "Heute sprechen wir über Open Source.", "Diese Untertitel entstehen live."},
 	"it": {"Benvenuti a Nerdearla.", "Oggi parliamo di open source.", "Questi sottotitoli sono generati dal vivo."},
+	"hi": {"नमस्ते, कार्यक्रम में आपका स्वागत है।", "आज हम अपनी भाषा में सुनेंगे और पढ़ेंगे।", "ये कैप्शन लाइव बन रहे हैं।"},
+	"te": {"అందరికీ నమస్కారం, కార్యక్రమానికి స్వాగతం.", "ఈ రోజు మన భాషలోనే వింటాం, చదువుతాం.", "ఈ క్యాప్షన్‌లు ప్రత్యక్షంగా తయారవుతున్నాయి."},
+	"kn": {"ಎಲ್ಲರಿಗೂ ನಮಸ್ಕಾರ, ಕಾರ್ಯಕ್ರಮಕ್ಕೆ ಸ್ವಾಗತ.", "ಇಂದು ನಮ್ಮ ಭಾಷೆಯಲ್ಲೇ ಕೇಳುತ್ತೇವೆ, ಓದುತ್ತೇವೆ.", "ಈ ಶೀರ್ಷಿಕೆಗಳು ನೇರವಾಗಿ ತಯಾರಾಗುತ್ತಿವೆ."},
+	"ta": {"அனைவருக்கும் வணக்கம், நிகழ்ச்சிக்கு வரவேற்கிறோம்.", "இன்று நம் மொழியிலேயே கேட்போம், படிப்போம்.", "இந்த வசனங்கள் நேரலையில் உருவாகின்றன."},
 }
 
 // Fake is a scripted Engine for tests and offline demos: for every Every

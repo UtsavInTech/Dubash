@@ -39,7 +39,10 @@ func newTestServer(t *testing.T) *httptest.Server {
 	log := slog.New(slog.DiscardHandler)
 	var rooms []*room.Room
 	for _, rc := range []config.Room{
-		{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}},
+		// sala-a translates whether or not anyone reads it, so exports are
+		// complete; translating only languages being read is tested in
+		// internal/room.
+		{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}, AlwaysTranslate: []string{"en", "es"}},
 		{ID: "sala-b", Title: "B", Source: "es", Targets: []string{"en"}},
 	} {
 		rm, err := room.New(rc, room.Deps{ASR: asr.Fake{Every: 1}, Translator: translate.Fake{}, Store: st, Log: log})
@@ -180,7 +183,8 @@ func TestLiveFlowAndExport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events/sala-a", nil)
+	// A Spanish reader: the server translates into Spanish because of it.
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events/sala-a?lang=es", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -189,17 +193,20 @@ func TestLiveFlowAndExport(t *testing.T) {
 	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("content-type %q", ct)
 	}
-	finals := make(chan string, 8)
+	translations := make(chan string, 8)
+	ids := make(chan string, 16)
 	go func() {
 		sc := bufio.NewScanner(resp.Body)
 		event := ""
 		for sc.Scan() {
 			line := sc.Text()
 			switch {
+			case strings.HasPrefix(line, "id: "):
+				ids <- strings.TrimPrefix(line, "id: ")
 			case strings.HasPrefix(line, "event: "):
 				event = strings.TrimPrefix(line, "event: ")
-			case strings.HasPrefix(line, "data: ") && event == "final":
-				finals <- strings.TrimPrefix(line, "data: ")
+			case strings.HasPrefix(line, "data: ") && event == "translation":
+				translations <- strings.TrimPrefix(line, "data: ")
 			}
 		}
 	}()
@@ -214,16 +221,19 @@ func TestLiveFlowAndExport(t *testing.T) {
 		}
 	}
 	select {
-	case data := <-finals:
-		var seg caption.Segment
-		if err := json.Unmarshal([]byte(data), &seg); err != nil {
+	case data := <-translations:
+		var tr caption.Translation
+		if err := json.Unmarshal([]byte(data), &tr); err != nil {
 			t.Fatal(err)
 		}
-		if seg.Translations["es"] != "[es] Welcome to Nerdearla." {
-			t.Fatalf("segment = %+v", seg)
+		if tr.Lang != "es" || tr.Segment != 0 || tr.Text != "[es] Welcome to Nerdearla." {
+			t.Fatalf("translation = %+v", tr)
 		}
 	case <-ctx.Done():
-		t.Fatal("no final segment received")
+		t.Fatal("no translation received")
+	}
+	if len(ids) < 2 { // the final and its translation
+		t.Fatalf("committed messages carry no SSE ids")
 	}
 	ws.Close(websocket.StatusNormalClosure, "")
 
@@ -515,9 +525,149 @@ func TestMetrics(t *testing.T) {
 		`dubash_room_live{room="sala-a"} 0` + "\n",
 		`dubash_room_segments_total{room="sala-b"} 0` + "\n",
 		`dubash_room_audio_level_dbfs{room="sala-a"} -99` + "\n",
+		"# TYPE dubash_room_listeners gauge\n",
+		"# TYPE dubash_room_translation_delay_seconds gauge\n",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics missing %q:\n%s", want, body)
 		}
+	}
+
+	// After a Spanish reader and a line: readers and delays per language.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events/sala-a?lang=es", nil)
+	events, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Body.Close()
+	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/ingest/sala-a?token=secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		ws.Write(ctx, websocket.MessageBinary, make([]byte, asr.BytesPerSecond/10))
+	}
+	ws.Close(websocket.StatusNormalClosure, "")
+	for {
+		_, body = get(t, srv.URL+"/metrics", "Authorization", "Bearer secret")
+		if strings.Contains(body, `dubash_room_translation_delay_seconds{room="sala-a",lang="es",quantile="0.95"}`) &&
+			strings.Contains(body, `dubash_room_listeners{room="sala-a",lang="es"} 1`) {
+			break
+		}
+		if ctx.Err() != nil {
+			t.Fatalf("per-language metrics missing:\n%s", body)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestPauseResumeEnd(t *testing.T) {
+	srv := newTestServer(t)
+	for _, action := range []string{"pause", "resume", "end"} {
+		resp, err := http.Post(srv.URL+"/api/admin/rooms/sala-a/"+action, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s without token: %d", action, resp.StatusCode)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/ingest/sala-a?token=secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	control := func(action string) map[string]any {
+		t.Helper()
+		resp, err := http.Post(srv.URL+"/api/admin/rooms/sala-a/"+action+"?token=secret", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var st map[string]any
+		json.NewDecoder(resp.Body).Decode(&st)
+		return st
+	}
+	for !(func() bool { _, b := get(t, srv.URL+"/api/rooms"); return strings.Contains(b, `"live":true`) })() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if st := control("pause"); st["paused"] != true {
+		t.Fatalf("pause: %v", st)
+	}
+	if st := control("resume"); st["paused"] != false {
+		t.Fatalf("resume: %v", st)
+	}
+	if st := control("end"); st["ended"] != true {
+		t.Fatalf("end: %v", st)
+	}
+	// The operator is told the event ended, with a code that says "do not
+	// reconnect".
+	_, _, err = ws.Read(ctx)
+	if websocket.CloseStatus(err) != StatusEventEnded {
+		t.Fatalf("operator socket closed with %v", err)
+	}
+}
+
+func TestEventsResumeFromLastEventID(t *testing.T) {
+	srv := newTestServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/ingest/sala-a?token=secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 20 { // two lines
+		ws.Write(ctx, websocket.MessageBinary, make([]byte, asr.BytesPerSecond/10))
+	}
+	ws.Close(websocket.StatusNormalClosure, "")
+	// Wait for both lines and their translations.
+	for {
+		if _, body := get(t, srv.URL+"/export/sala-a/txt?lang=es"); strings.Count(body, "[es]") == 2 {
+			break
+		}
+		if ctx.Err() != nil {
+			t.Fatal("lines not translated")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// replay reads one connection's replay: ids and events until caught-up.
+	replay := func(lastID string) (ids, events []string) {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events/sala-a?lang=es", nil)
+		if lastID != "" {
+			req.Header.Set("Last-Event-ID", lastID)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			line := sc.Text()
+			if id, ok := strings.CutPrefix(line, "id: "); ok {
+				ids = append(ids, id)
+			}
+			if e, ok := strings.CutPrefix(line, "event: "); ok {
+				if e == "caught-up" {
+					return
+				}
+				events = append(events, e)
+			}
+		}
+		return
+	}
+	ids, events := replay("")
+	if len(ids) != 4 || strings.Join(events, " ") != "status final translation final translation" {
+		t.Fatalf("full replay: ids %v events %v", ids, events)
+	}
+	// A browser that saw the first line and its translation gets the rest.
+	ids2, events2 := replay(ids[1])
+	if len(ids2) != 2 || ids2[0] != ids[2] || strings.Join(events2, " ") != "status final translation" {
+		t.Fatalf("resume: ids %v events %v", ids2, events2)
 	}
 }

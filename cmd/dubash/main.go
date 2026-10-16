@@ -1,4 +1,4 @@
-// Command dubash serves real-time conference captions.
+// Command dubash serves live captions and translations to phones.
 package main
 
 import (
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -100,11 +101,13 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 	return err
 }
 
-// backends picks the transcription engine and the translator. Gemini is
-// the default for both; ASR_URL and TRANSLATE_URL point either one at an
-// OpenAI-compatible server instead (Whisper and Gemma on the venue's own
-// hardware, for example), and GEMINI_API_KEY is only needed for what still
-// uses Gemini.
+// backends picks the transcription engine and the translator.
+//
+// ASR_PROVIDER and TRANSLATE_PROVIDER choose explicitly: sarvam, gemini,
+// or whisper / chat (the OpenAI-compatible servers at ASR_URL and
+// TRANSLATE_URL). Without them: Sarvam when SARVAM_API_KEY is set (the
+// default for Indian languages), else the URL servers when their URLs are
+// set, else Gemini.
 func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, translate.Translator, error) {
 	if fake {
 		return asr.Fake{}, translate.Fake{}, nil
@@ -116,7 +119,7 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 		}
 		key := os.Getenv("GEMINI_API_KEY")
 		if key == "" {
-			return nil, errors.New("GEMINI_API_KEY is required unless ASR_URL and TRANSLATE_URL are set (or run with -fake)")
+			return nil, errors.New("GEMINI_API_KEY is required for Gemini (or set SARVAM_API_KEY, or ASR_URL and TRANSLATE_URL, or run with -fake)")
 		}
 		c, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: key, Backend: genai.BackendGeminiAPI})
 		if err != nil {
@@ -125,30 +128,69 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 		client = c
 		return c, nil
 	}
+	sarvamKey := os.Getenv("SARVAM_API_KEY")
+	pick := func(explicit, url string) string {
+		switch {
+		case explicit != "":
+			return explicit
+		case sarvamKey != "":
+			return "sarvam"
+		case url != "":
+			return "url"
+		}
+		return "gemini"
+	}
 
 	var engine asr.Engine
-	if u := os.Getenv("ASR_URL"); u != "" {
+	switch p := pick(os.Getenv("ASR_PROVIDER"), os.Getenv("ASR_URL")); p {
+	case "sarvam":
+		if sarvamKey == "" {
+			return nil, nil, errors.New("ASR_PROVIDER=sarvam needs SARVAM_API_KEY")
+		}
+		engine = &asr.Sarvam{
+			Key: sarvamKey, Model: os.Getenv("SARVAM_ASR_MODEL"), Log: log,
+			Early: os.Getenv("SARVAM_EARLY") == "on",
+		}
+	case "url", "whisper":
 		engine = &asr.Whisper{
-			URL: u, Model: os.Getenv("ASR_MODEL"), Key: os.Getenv("ASR_API_KEY"),
+			URL: os.Getenv("ASR_URL"), Model: os.Getenv("ASR_MODEL"), Key: os.Getenv("ASR_API_KEY"),
 			Interim: 1500 * time.Millisecond,
 		}
-	} else {
+	case "gemini":
 		c, err := gemini()
 		if err != nil {
 			return nil, nil, err
 		}
 		engine = &asr.Gemini{Client: c, Model: os.Getenv("ASR_MODEL"), Log: log}
+	default:
+		return nil, nil, fmt.Errorf("unknown ASR_PROVIDER %q (sarvam, gemini, whisper)", p)
 	}
 
 	var translator translate.Translator
-	if u := os.Getenv("TRANSLATE_URL"); u != "" {
-		translator = translate.Chat{URL: u, Model: os.Getenv("TRANSLATE_MODEL"), Key: os.Getenv("TRANSLATE_API_KEY")}
-	} else {
+	switch p := pick(os.Getenv("TRANSLATE_PROVIDER"), os.Getenv("TRANSLATE_URL")); p {
+	case "sarvam":
+		if sarvamKey == "" {
+			return nil, nil, errors.New("TRANSLATE_PROVIDER=sarvam needs SARVAM_API_KEY")
+		}
+		rpm := 60 // Sarvam's Starter plan; Pro 200, Business 1000 (per account)
+		if v := os.Getenv("SARVAM_TRANSLATE_RPM"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, nil, fmt.Errorf("SARVAM_TRANSLATE_RPM: %w", err)
+			}
+			rpm = n
+		}
+		translator = translate.Sarvam{Key: sarvamKey, Model: os.Getenv("SARVAM_TRANSLATE_MODEL"), Limiter: translate.NewRateLimiter(rpm)}
+	case "url", "chat":
+		translator = translate.Chat{URL: os.Getenv("TRANSLATE_URL"), Model: os.Getenv("TRANSLATE_MODEL"), Key: os.Getenv("TRANSLATE_API_KEY")}
+	case "gemini":
 		c, err := gemini()
 		if err != nil {
 			return nil, nil, err
 		}
 		translator = translate.Hedged{Inner: translate.Gemini{Client: c, Model: os.Getenv("TRANSLATE_MODEL")}}
+	default:
+		return nil, nil, fmt.Errorf("unknown TRANSLATE_PROVIDER %q (sarvam, gemini, chat)", p)
 	}
 	return engine, translator, nil
 }

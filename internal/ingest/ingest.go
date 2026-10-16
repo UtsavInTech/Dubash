@@ -35,7 +35,12 @@ var (
 	ErrUnknownRoom = errors.New("ingest: unknown room")
 	// ErrLanguage means the room does not serve the requested language.
 	ErrLanguage = errors.New("ingest: the room does not serve that language")
+	// ErrEnded means the event was ended from the panel.
+	ErrEnded = errors.New("ingest: the event was ended from the panel")
 )
+
+// statusEventEnded is the close code the server uses for an ended event.
+const statusEventEnded websocket.StatusCode = 4001
 
 // Options say where to send the audio.
 type Options struct {
@@ -117,7 +122,7 @@ func Stream(ctx context.Context, opt Options, src io.Reader) error {
 		switch {
 		case err == nil: // src ended and the room closed cleanly
 			return <-srcErr
-		case errors.Is(err, ErrUnauthorized), errors.Is(err, ErrUnknownRoom), errors.Is(err, ErrLanguage):
+		case errors.Is(err, ErrUnauthorized), errors.Is(err, ErrUnknownRoom), errors.Is(err, ErrLanguage), errors.Is(err, ErrEnded):
 			return err
 		case ctx.Err() != nil:
 			return nil
@@ -198,6 +203,8 @@ func closeError(err error) error {
 		return errors.New("server closed the session")
 	case websocket.StatusPolicyViolation:
 		return errors.New("room busy: another operator is streaming")
+	case statusEventEnded:
+		return ErrEnded
 	}
 	var ce websocket.CloseError
 	if errors.As(err, &ce) && ce.Reason != "" {

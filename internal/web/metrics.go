@@ -1,9 +1,14 @@
+// Modified by the Dubash contributors: per-language readers, delays and
+// skipped lines; commit lag; time to first caption; paused.
+
 package web
 
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/UtsavInTech/dubash/internal/room"
@@ -36,6 +41,44 @@ var metrics = []metric{
 		func(s room.Status) float64 { return unix(s.LastAudioAt) }},
 	{"dubash_room_last_text_timestamp_seconds", "gauge", "Unix time the recognizer last produced text (0 if never).",
 		func(s room.Status) float64 { return unix(s.LastTextAt) }},
+	{"dubash_room_paused", "gauge", "Whether the live transmission is paused (1) or not (0).",
+		func(s room.Status) float64 { return b2f(s.Paused) }},
+	{"dubash_room_first_caption_seconds", "gauge", "Time from the start of the current or last transmission to its first committed line.",
+		func(s room.Status) float64 { return float64(s.FirstCaptionMs) / 1000 }},
+}
+
+// langMetric is a metric family with a value per room and language.
+type langMetric struct {
+	name, kind, help string
+	values           func(room.Status) map[string]float64
+}
+
+var langMetrics = []langMetric{
+	{"dubash_room_listeners", "gauge", "Viewers per language they read (lang=\"\" reads the original only).",
+		func(s room.Status) map[string]float64 {
+			out := map[string]float64{}
+			for l, n := range s.Listeners {
+				out[l] = float64(n)
+			}
+			return out
+		}},
+	{"dubash_room_dropped_lines_total", "counter", "Lines a language skipped because its translations fell behind.",
+		func(s room.Status) map[string]float64 {
+			out := map[string]float64{}
+			for l, n := range s.Dropped {
+				out[l] = float64(n)
+			}
+			return out
+		}},
+}
+
+// quantiles writes p50 and p95 of a latency as gauges with a quantile label.
+func quantiles(b *bytes.Buffer, name, labels string, l room.Latency) {
+	if l.N == 0 {
+		return
+	}
+	fmt.Fprintf(b, "%s{%s,quantile=\"0.5\"} %g\n", name, labels, float64(l.P50)/1000)
+	fmt.Fprintf(b, "%s{%s,quantile=\"0.95\"} %g\n", name, labels, float64(l.P95)/1000)
 }
 
 // metrics serves every room's status in the Prometheus text format, for
@@ -52,6 +95,26 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 			// Room ids are [a-z0-9-]: nothing to escape.
 			fmt.Fprintf(&b, "%s{room=%q} %g\n", m.name, st.ID, m.value(st))
 		}
+	}
+	for _, m := range langMetrics {
+		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s %s\n", m.name, m.help, m.name, m.kind)
+		for _, st := range statuses {
+			vals := m.values(st)
+			for _, l := range slices.Sorted(maps.Keys(vals)) {
+				fmt.Fprintf(&b, "%s{room=%q,lang=%q} %g\n", m.name, st.ID, l, vals[l])
+			}
+		}
+	}
+	const tr, lag = "dubash_room_translation_delay_seconds", "dubash_room_commit_lag_seconds"
+	fmt.Fprintf(&b, "# HELP %s Time from a committed line to its translation, recent lines (p50, p95).\n# TYPE %s gauge\n", tr, tr)
+	for _, st := range statuses {
+		for _, l := range slices.Sorted(maps.Keys(st.Translation)) {
+			quantiles(&b, tr, fmt.Sprintf("room=%q,lang=%q", st.ID, l), st.Translation[l])
+		}
+	}
+	fmt.Fprintf(&b, "# HELP %s Audio received after a line ended before it was committed, recent lines (p50, p95).\n# TYPE %s gauge\n", lag, lag)
+	for _, st := range statuses {
+		quantiles(&b, lag, fmt.Sprintf("room=%q", st.ID), st.CommitLag)
 	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.Write(b.Bytes())

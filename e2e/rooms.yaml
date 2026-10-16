@@ -1,0 +1,24 @@
+# Rooms for the browser end-to-end suite (run.sh): the upstream Spanish and
+# English setup the checks were written for.
+# Each room is one stage and serves `source` plus `targets` (en, es, pt, fr,
+# de, it).
+# `source` is the language spoken by default; the operator picks the one
+# actually spoken for each transmission and the others become translations.
+# `glossary` terms are biased in transcription and kept as-is in translation.
+rooms:
+  - id: sala-a
+    title: "Sala A — Keynotes"
+    source: en
+    targets: [es, pt]
+    glossary: [Nerdearla, Kubernetes, eBPF, Gemini, Gemma, open source]
+  - id: sala-b
+    title: "Sala B — Charlas"
+    source: es
+    targets: [en]
+    glossary: [Nerdearla, Konex, Kubernetes]
+  # Added by the Dubash contributors: a Hindi event read in Telugu.
+  - id: hall-hi
+    title: "हिन्दी सभा"
+    speaker: "Test Speaker"
+    source: hi
+    targets: [en, te]

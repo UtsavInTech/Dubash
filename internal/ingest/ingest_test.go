@@ -27,7 +27,8 @@ func newServer(t *testing.T) (*httptest.Server, *store.Store) {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.DiscardHandler)
-	rm, err := room.New(config.Room{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}},
+	// Nobody reads the captions here: translate anyway, to check the store.
+	rm, err := room.New(config.Room{ID: "sala-a", Title: "A", Source: "en", Targets: []string{"es"}, AlwaysTranslate: []string{"es"}},
 		room.Deps{ASR: asr.Fake{Every: 1}, Translator: translate.Fake{}, Store: st, Log: log})
 	if err != nil {
 		t.Fatal(err)

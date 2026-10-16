@@ -20,6 +20,19 @@ type Room struct {
 	Source   string   `yaml:"source" json:"source"`
 	Targets  []string `yaml:"targets" json:"targets"`
 	Glossary []string `yaml:"glossary" json:"glossary,omitempty"`
+	// Speaker names who speaks, for the audience's welcome line.
+	Speaker string `yaml:"speaker" json:"speaker,omitempty"`
+	// ASRMode is the recognizer's style; for Sarvam "codemix" writes
+	// English words in Latin script inside Hindi captions (Hinglish), the
+	// default writes them in the language's own script.
+	ASRMode string `yaml:"asr_mode" json:"-"`
+	// Prompt is a short description of the event, a hint for recognizers
+	// that take one.
+	Prompt string `yaml:"prompt" json:"-"`
+	// AlwaysTranslate lists target languages translated even while nobody
+	// reads them (for the transcript export). Others are translated only
+	// while someone reads them.
+	AlwaysTranslate []string `yaml:"always_translate" json:"-"`
 }
 
 // Languages are every language the room serves, spoken or translated:
@@ -73,6 +86,11 @@ func Parse(data []byte) (Config, error) {
 		for j, t := range r.Targets {
 			if !lang.Valid(t) || t == r.Source || slices.Contains(r.Targets[:j], t) {
 				return Config{}, fmt.Errorf("room %q: invalid target language %q", r.ID, t)
+			}
+		}
+		for _, l := range r.AlwaysTranslate {
+			if !slices.Contains(r.Languages(), l) {
+				return Config{}, fmt.Errorf("room %q: always_translate %q is not one of its languages", r.ID, l)
 			}
 		}
 		if len(r.Glossary) > maxGlossary {

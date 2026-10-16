@@ -2,10 +2,28 @@
    conventional components, contrast and focus that pass WCAG AA/AAA.
    Inclusive Sans (Olivia King, SIL OFL) is served from this binary: it
    tells I, l and 1 apart and 0 from O, and pages make no third-party
-   requests. */
+   requests. Indian scripts use Noto Sans, also served from the binary.
+   Modified by the Dubash contributors: Indian scripts, pending and
+   paused/ended states. */
 
 @font-face { font-family: "Inclusive Sans"; src: url(/static/fonts/inclusive-sans.woff2) format("woff2"); font-weight: 300 700; font-style: normal; font-display: swap; }
 @font-face { font-family: "Inclusive Sans"; src: url(/static/fonts/inclusive-sans-italic.woff2) format("woff2"); font-weight: 300 700; font-style: italic; font-display: swap; }
+
+/* Indian scripts: Noto Sans (SIL OFL, see fonts/OFL-noto.txt), one subset per
+   script from Google Fonts. Browsers download a file only when the page
+   shows a character in its unicode-range. Generated; see docs/DECISIONS.md.
+   Characters several scripts share (danda, rupee sign, joiners, Vedic
+   marks) are left to the Devanagari face only, so a Hindi line does not
+   pull in the Punjabi and Bengali fonts. */
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-devanagari.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0900-097F, U+1CD0-1CF4, U+1CF7-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B0A; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-bengali.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0980-09FE, U+1CE1, U+1CEA, U+1CED, U+A8F1, U+11DF0-11DF1; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-telugu.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0C00-0C7F; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-tamil.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0B82-0BFA; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-gujarati.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0A80-0AFF; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-kannada.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0C80-0CF3; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-malayalam.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0307, U+0323, U+0D00-0D7F, U+A830-A832; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-oriya.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0B01-0B77; }
+@font-face { font-family: "Dubash Indic"; src: url(/static/fonts/noto-sans-gurmukhi.woff2) format("woff2"); font-weight: 300 700; font-display: swap; unicode-range: U+0A01-0A76, U+262C; }
 
 :root {
   --bg: #ffffff;
@@ -26,7 +44,9 @@
   --header-bg: #0b0c0c;
   --header-text: #ffffff;
 
-  --font: "Inclusive Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Inclusive Sans has no Indian scripts: those characters fall through to
+     "Dubash Indic", then to the phone's own Noto fonts. */
+  --font: "Inclusive Sans", "Dubash Indic", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
   --scale: 1;
   --tracking: normal;
   --leading: 1.45;
@@ -153,7 +173,16 @@ input[type=file]::file-selector-button { min-height: 44px; margin-right: 12px; p
 #lines p:last-child { color: var(--text); }
 #lines .orig { display: block; font-size: .7em; line-height: 1.4; color: var(--text-2); margin-top: .2em; }
 #lines .note { font-size: .6em; color: var(--text-2); margin-left: .4em; }
-#interim span { color: var(--text-2); }
+#interim span { color: var(--text-2); font-style: italic; }
+/* Indian scripts stack vowel signs above and below the line: more room. */
+#captions :is(:lang(hi), :lang(mr), :lang(bn), :lang(te), :lang(ta), :lang(gu), :lang(kn), :lang(ml), :lang(or), :lang(pa)) { line-height: calc(var(--leading) + .15); }
+/* A committed line still waiting for its translation: the original, dimmed. */
+#lines p.pending > span { color: var(--text-2); opacity: .75; }
+#lines p.pending .note { font-style: italic; }
+.banner { margin: 0 0 1em; padding: 12px 16px; border-left: 6px solid var(--border-strong); background: var(--surface); font-size: 1rem; }
+.banner strong { display: block; }
+.welcome { font-size: 1rem; color: var(--text-2); margin: 0 0 1em; }
+.status.paused { color: var(--text); border-color: var(--text-2); }
 .empty { color: var(--text-2); }
 .empty strong { display: block; color: var(--text); margin-bottom: .3em; }
 
@@ -202,6 +231,7 @@ body[data-mode="overlay"] .stage { max-width: none; position: fixed; left: 0; ri
 body[data-mode="overlay"] #captions { max-width: none; font-size: calc(3.4vw * var(--scale)); font-weight: 700; }
 body[data-mode="overlay"] #captions span { background: rgb(0 0 0 / .8); color: #fff; padding: .08em .35em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 body[data-mode="overlay"] #lines .note, body[data-mode="overlay"] .empty { display: none; }
+body:not([data-mode="mobile"]) #lines p.pending, body:not([data-mode="mobile"]) .banner, body:not([data-mode="mobile"]) .welcome { display: none; }
 
 body:not([data-mode="mobile"]) .only-mobile,
 body:not([data-mode="screen"]) .only-screen { display: none !important; }

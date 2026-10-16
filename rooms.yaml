@@ -1,16 +1,27 @@
-# Each room is one stage and serves `source` plus `targets` (en, es, pt, fr,
-# de, it).
-# `source` is the language spoken by default; the operator picks the one
-# actually spoken for each transmission and the others become translations.
-# `glossary` terms are biased in transcription and kept as-is in translation.
+# Each room is one event (a stage, a hall, a session) and serves `source`
+# plus `targets`. Languages: en, hi, bn, mr, te, ta, gu, kn, ml, or, pa (and
+# es, pt, fr, de, it).
+#
+# `source` is the language usually spoken; the speaker's console picks the
+# one actually spoken for each transmission, and the others become
+# translations. A target language is translated only while someone reads it,
+# except those in `always_translate` (for a complete transcript export).
+#
+# `asr_mode: codemix` writes English words in Latin script inside Hindi
+# captions ("हमारी team ने cost बचाई"); leave it out to write them in
+# Devanagari. `glossary` terms bias recognition (at most 50 reach Sarvam)
+# and are never translated.
 rooms:
-  - id: sala-a
-    title: "Sala A — Keynotes"
+  - id: main-hall
+    title: "Main hall"
+    speaker: ""
+    source: hi
+    targets: [en, te, kn, ta]
+    asr_mode: codemix
+    always_translate: [en]
+    glossary: [Dubash, QR code]
+  - id: hall-b
+    title: "Hall B"
     source: en
-    targets: [es, pt]
-    glossary: [Nerdearla, Kubernetes, eBPF, Gemini, Gemma, open source]
-  - id: sala-b
-    title: "Sala B — Charlas"
-    source: es
-    targets: [en]
-    glossary: [Nerdearla, Konex, Kubernetes]
+    targets: [hi, te, kn]
+    glossary: [Dubash]
