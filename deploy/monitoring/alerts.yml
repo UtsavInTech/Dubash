@@ -1,0 +1,37 @@
+groups:
+  - name: dubash-event
+    rules:
+      - alert: DubashNodeDown
+        expr: up{job="dubash"} == 0
+        for: 15s
+        labels: {severity: critical}
+        annotations:
+          summary: "Dubash node {{ $labels.instance }} is unavailable"
+      - alert: DubashPipelineErrors
+        expr: increase(dubash_room_errors_total[2m]) > 3
+        for: 15s
+        labels: {severity: warning}
+        annotations:
+          summary: "Repeated pipeline failures in {{ $labels.room }}"
+      - alert: DubashTranslationBehind
+        expr: dubash_room_translation_delay_seconds{quantile="0.95"} > 5
+        for: 30s
+        labels: {severity: warning}
+        annotations:
+          summary: "Translation delay exceeds five seconds in {{ $labels.room }}"
+      - alert: DubashAudioMissing
+        expr: (time() - dubash_room_last_audio_timestamp_seconds > 10) and on(instance,room) (dubash_room_live == 1) and on(instance,room) (dubash_room_paused == 0)
+        for: 10s
+        labels: {severity: critical}
+        annotations:
+          summary: "Live room {{ $labels.room }} is receiving no audio"
+      - alert: DubashProviderFailover
+        expr: increase(dubash_asr_failovers_total[5m]) + increase(dubash_translation_fallbacks_total[5m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Node {{ $labels.instance }} has switched to a backup provider"
+      - alert: DubashDroppedCaptions
+        expr: increase(dubash_room_dropped_lines_total[2m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Translation queue dropped captions in {{ $labels.room }}"
