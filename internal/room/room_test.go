@@ -408,9 +408,13 @@ func TestPauseKeepsAudioFromTheRecognizer(t *testing.T) {
 	chunk := make([]byte, asr.BytesPerSecond/10)
 	audio <- chunk
 	rm.Pause()
+	var sent time.Time
 	for range 5 {
+		sent = time.Now()
 		audio <- chunk
 	}
+	// Resume only once the meter has looked at the last paused chunk.
+	waitFor(t, func() bool { return !rm.Status().LastAudioAt.Before(sent) })
 	if st := rm.Status(); !st.Paused || !st.Live {
 		t.Fatalf("status %+v", st)
 	}
