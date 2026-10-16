@@ -28,14 +28,19 @@ language. No app to install.
 ```bash
 cp .env.example .env            # put SARVAM_API_KEY and ADMIN_TOKEN in it
 set -a; source .env; set +a
-go run ./cmd/dubash             # http://localhost:8080, rooms from rooms.yaml
+go run ./cmd/dubash             # http://localhost:8080 (this computer only), rooms from rooms.yaml
+go run ./cmd/dubash -addr :8080 # phones on the network too: needs a strong ADMIN_TOKEN
 ```
 
-- Speaker console: `http://localhost:8080/operator/main-hall?token=…`, choose
-  the microphone, **Go live**. **Pause** stops recognition (nothing is
-  captioned or billed) without disconnecting.
+- Admin: `/admin`, enter the admin token: readers and delay per language,
+  pause, end, **Speaker link** (a console link for one event, for a few
+  hours, revocable).
+- Speaker console: the speaker link, or `/operator/main-hall` with the admin
+  token; choose the microphone, **Go live**. **Pause** stops recognition
+  (nothing is captioned or billed) without disconnecting.
 - Audience: scan the QR at `/posters`, or open `/r/main-hall?lang=te`.
-- Admin: `/admin?token=…`: readers and delay per language, pause, end.
+  An event can ask for a PIN (`audience_pin`), limit downloads (`exports`)
+  and delete old transcripts (`retention_days`): see docs/RUNBOOK.md.
 - Without a key: `go run ./cmd/dubash -fake` (scripted captions, including
   Hindi, Telugu, Kannada and Tamil).
 
@@ -171,7 +176,10 @@ prompt) and are never translated.
 | Env / flag | Default | |
 |---|---|---|
 | `GEMINI_API_KEY` | — | required unless `-fake` or both `ASR_URL` and `TRANSLATE_URL` are set |
-| `ADMIN_TOKEN` | empty (open) | guards `/operator` streaming, `/ingest`, `/admin`, `/metrics` |
+| `ADMIN_TOKEN` | empty (open, on 127.0.0.1 only) | guards `/operator` streaming, `/ingest`, `/admin`, `/bank`, `/metrics`; at least 20 characters on a public address |
+| `TOKEN_SECRET` | from `ADMIN_TOKEN` | signs speaker links, reader passes and QR join codes |
+| `TRUST_PROXY` | off | `on` behind a proxy that sets `X-Forwarded-For` |
+| `MAX_VIEWERS`, `MAX_VIEWERS_PER_IP` | 20000, 300 | caption connection caps |
 | `PUBLIC_URL` | request host | audience URL encoded in QR codes, e.g. `https://subs.example.org` |
 | `ASR_URL` | — | OpenAI-compatible transcription server (`…/v1`); replaces Gemini Live |
 | `ASR_MODEL` | `gemini-3.5-transcribe-live`, or `whisper-1` with `ASR_URL` | transcription model |
@@ -179,7 +187,8 @@ prompt) and are never translated.
 | `TRANSLATE_URL` | — | OpenAI-compatible chat server (`…/v1`); replaces Gemini |
 | `TRANSLATE_MODEL` | `gemini-3.5-flash-lite`, or `gemma3` with `TRANSLATE_URL` | translation model |
 | `TRANSLATE_API_KEY` | — | bearer token for `TRANSLATE_URL`, if it needs one |
-| `-addr` | `:8080` | listen address |
+| `-addr` | `127.0.0.1:8080` | listen address; `:8080` for phones on the network (needs a strong token) |
+| `-insecure` | off | start on a public address with a weak token (never for an event) |
 | `-config` | `rooms.yaml` | rooms file |
 | `-data` | `data` | transcript directory (JSONL per room) |
 | `-fake` | off | scripted engines, no API calls |

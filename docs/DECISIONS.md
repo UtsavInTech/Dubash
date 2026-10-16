@@ -342,3 +342,34 @@ Its data stays outside the repository (share-alike licences); the server
 reads it at start. Its devotional terms and meanings could seed
 suggested bank entries for religious events; not done without the
 owner's choice of which.
+
+### D34. Roles without accounts: admin token, speaker links, readers
+
+The brief asks for organiser, publisher and listener roles before a pilot;
+accounts (sign-up, passwords, recovery) would be a project of their own.
+Instead: the organiser keeps the admin token; a speaker gets a signed
+link for one event (HMAC-SHA256 over room, issue and expiry times; at most
+72 hours; revoked per event by date, so one write revokes every link
+issued so far); readers need nothing, or a PIN or the hall's QR code. The
+link's token rides in the URL fragment, then in a WebSocket subprotocol,
+never in a URL a server logs. `TOKEN_SECRET` decouples the signing key
+from the admin token. See SECURITY_REVIEW.md.
+
+### D35. Audience PIN and revocable QR codes, not audience accounts
+
+Closed events (a company's town hall, a private satsang) need captions for
+those in the room only. A PIN shown in the hall, or the poster's QR code,
+gives a 12-hour signed cookie. The QR code opens `/j/{code}`, an HMAC of
+the room and `join_revision`, not the room id, so printed codes can be
+revoked by a config change. The lockout (10 failures in 5 minutes per
+address) applies to PINs as to tokens. A PIN is not a password: 6+
+digits, and captions can still be shared by whoever got in.
+
+### D36. Privacy defaults: keep less, delete on schedule
+
+Transcripts are what people said. Files are now 0600 in a 0700 directory;
+`retention_days` purges lines, live fixes and their text in the audit log
+hourly; the panel deletes an ended event's transcript; `store_transcript:
+false` keeps nothing on disk (live relay and in-memory replay only).
+The server also listens on 127.0.0.1 unless told otherwise, and refuses a
+public address with an empty or weak admin token.
