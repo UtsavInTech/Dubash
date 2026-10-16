@@ -10,6 +10,7 @@ package correct
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -132,10 +133,8 @@ func (c *Corrector) Correct(ctx context.Context, in Input) Result {
 		}
 		mctx, cancel := context.WithTimeout(ctx, deadline)
 		edits, err := c.Model.Propose(mctx, Input{Text: res.Text, Lang: in.Lang, Script: ifConf(in.Script, scriptOK), ScriptConf: in.ScriptConf, Previous: in.Previous}, relevant(res.Text, in.Entries))
+		res.TimedOut = errors.Is(mctx.Err(), context.DeadlineExceeded)
 		cancel()
-		if mctx.Err() != nil {
-			res.TimedOut = true
-		}
 		if err == nil {
 			allowed := vocabulary(in.Entries, ifConf(in.Script, scriptOK))
 			for _, e := range edits {
@@ -222,6 +221,12 @@ func Apply(text string, e Edit) (string, bool) {
 	if len(words(to)) > len(words(from))+3 {
 		return text, false
 	}
+	// An edit replaces what was misheard; it does not add or drop words
+	// that were said right. If every word of one side is in the other, the
+	// edit only inserts (unspoken script text) or deletes (spoken words).
+	if fw, tw := script.Words(from), script.Words(to); len(fw) != len(tw) && (subset(fw, tw) || subset(tw, fw)) {
+		return text, false
+	}
 	i, n := findWords(text, from)
 	if i < 0 {
 		return text, false
@@ -270,6 +275,16 @@ func findWords(text, phrase string) (int, int) {
 		}
 	}
 	return -1, 0
+}
+
+// subset reports whether every word of a is in b.
+func subset(a, b []string) bool {
+	for _, w := range a {
+		if !slices.Contains(b, w) {
+			return false
+		}
+	}
+	return true
 }
 
 func containsWords(text, phrase string) bool {

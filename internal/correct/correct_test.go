@@ -161,3 +161,22 @@ func TestLLM(t *testing.T) {
 		t.Error("an error was swallowed")
 	}
 }
+
+// TestNoInsertionsOrDeletions: a fix replaces what was misheard; it never
+// adds unspoken script words nor drops spoken ones.
+func TestNoInsertionsOrDeletions(t *testing.T) {
+	for _, c := range []struct {
+		text string
+		e    Edit
+		ok   bool
+	}{
+		{"हम सब यहाँ हुए हैं", Edit{From: "यहाँ हुए", To: "यहाँ इकट्ठा हुए"}, false},
+		{"हम सब यहाँ इकट्ठा हुए हैं", Edit{From: "यहाँ इकट्ठा हुए", To: "यहाँ हुए"}, false},
+		{"डबस पायलट", Edit{From: "डबस", To: "Dubash"}, true},
+		{"राम खता सुनो", Edit{From: "राम खता", To: "राम कथा"}, true},
+	} {
+		if _, ok := Apply(c.text, c.e); ok != c.ok {
+			t.Errorf("Apply(%q, %+v) ok=%v", c.text, c.e, ok)
+		}
+	}
+}
