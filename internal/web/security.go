@@ -7,6 +7,8 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"os"
+	"errors"
 	"net/url"
 	"strconv"
 	"strings"
@@ -59,7 +61,7 @@ func (s *Server) secure(next http.Handler) http.Handler {
 }
 
 func staffPage(path string) bool {
-	for _, p := range []string{"/login", "/auth/", "/api/session", "/admin", "/bank", "/operator/", "/api/admin/", "/metrics", "/ingest/"} {
+	for _, p := range []string{"/login", "/auth/", "/api/session", "/admin", "/bank", "/speakers", "/terms", "/privacy", "/operator/", "/api/admin/", "/metrics", "/ingest/"} {
 		if path == p || strings.HasPrefix(path, p) {
 			return true
 		}
@@ -184,6 +186,10 @@ func (s *Server) Retain(ctx context.Context) {
 }
 
 func (s *Server) retainOnce(ctx context.Context, now time.Time) {
+	if s.Speakers != nil {
+		expired, err := s.Speakers.DeleteExpired(ctx, now)
+		if err != nil { s.log.Warn("speaker sample retention failed", "err", err) } else { for _, sample := range expired { if err := os.Remove(sample.FilePath); err != nil && !errors.Is(err, os.ErrNotExist) { s.log.Warn("speaker sample file deletion failed", "err", err) } } }
+	}
 	for _, rm := range s.roomSnapshot() {
 		days := rm.Config().RetentionDays
 		if days <= 0 {

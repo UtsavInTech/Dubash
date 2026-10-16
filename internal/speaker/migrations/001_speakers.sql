@@ -1,0 +1,5 @@
+CREATE TABLE speaker_profiles (id text PRIMARY KEY, display_name text NOT NULL, languages jsonb NOT NULL DEFAULT '[]', style text NOT NULL DEFAULT '', notes text NOT NULL DEFAULT '', created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL);
+CREATE TABLE speaker_consents (id text PRIMARY KEY, profile_id text NOT NULL REFERENCES speaker_profiles(id), permission text NOT NULL, text_version text NOT NULL, granted boolean NOT NULL, at timestamptz NOT NULL, by_role text NOT NULL, organiser_written_permission boolean NOT NULL DEFAULT false, retention_days int NOT NULL DEFAULT 0);
+CREATE INDEX speaker_consents_profile ON speaker_consents(profile_id, at);
+CREATE TABLE speaker_samples (id text PRIMARY KEY, profile_id text NOT NULL REFERENCES speaker_profiles(id), file_name text NOT NULL, file_path text NOT NULL, transcript text NOT NULL DEFAULT '', duration_seconds double precision NOT NULL, checks jsonb NOT NULL, uploaded_at timestamptz NOT NULL, delete_after timestamptz NOT NULL);
+CREATE INDEX speaker_samples_expiry ON speaker_samples(delete_after);
