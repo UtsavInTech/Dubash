@@ -21,8 +21,10 @@ import (
 
 	"github.com/UtsavInTech/dubash/internal/asr"
 	"github.com/UtsavInTech/dubash/internal/bank"
+	"github.com/UtsavInTech/dubash/internal/cluster"
 	"github.com/UtsavInTech/dubash/internal/config"
 	"github.com/UtsavInTech/dubash/internal/correct"
+	"github.com/UtsavInTech/dubash/internal/eventdb"
 	"github.com/UtsavInTech/dubash/internal/room"
 	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
@@ -46,14 +48,46 @@ func main() {
 }
 
 func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string, fake bool) error {
-	cfg, err := config.Load(roomsPath)
+	var cfg config.Config
+	var err error
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL != "" {
+		db, openErr := eventdb.Open(ctx, databaseURL)
+		if openErr != nil {
+			return openErr
+		}
+		cfg, err = eventdb.Catalog(ctx, db, roomsPath)
+		db.Close()
+	} else {
+		cfg, err = config.Load(roomsPath)
+	}
 	if err != nil {
 		return err
 	}
-	st, err := store.New(dataDir)
+	var coordinator *cluster.Coordinator
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		if databaseURL == "" {
+			return errors.New("REDIS_URL requires DATABASE_URL for shared events, transcripts and vocabulary")
+		}
+		coordinator, ctx, err = cluster.Start(ctx, redisURL, os.Getenv("NODE_URL"), os.Getenv("CLUSTER_NAMESPACE"), os.Getenv("ROOM_IDS"), cfg)
+		if err != nil {
+			return err
+		}
+		defer coordinator.Close()
+		cfg.Rooms = coordinator.Owned
+	} else if os.Getenv("ROOM_IDS") != "" || os.Getenv("NODE_URL") != "" {
+		return errors.New("ROOM_IDS and NODE_URL require REDIS_URL")
+	}
+	var st *store.Store
+	if databaseURL != "" {
+		st, err = store.OpenPG(ctx, databaseURL)
+	} else {
+		st, err = store.New(dataDir)
+	}
 	if err != nil {
 		return err
 	}
+	defer st.Close()
 
 	engine, translator, meter, err := backends(ctx, log, fake)
 	if err != nil {
@@ -102,9 +136,27 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 			rm.SetVersion(v)
 		}
 	}
+	local := site.Handler()
+	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/readyz" {
+			readyCtx, cancel := context.WithTimeout(r.Context(), time.Second)
+			defer cancel()
+			if err := st.Ready(readyCtx); err != nil {
+				http.Error(w, "transcript database unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Write([]byte("ok"))
+			return
+		}
+		local.ServeHTTP(w, r)
+	})
+	if coordinator != nil {
+		handler = coordinator.Handler(handler)
+	}
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           site.Handler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		// Cancel long-lived SSE and WebSocket requests on shutdown.
 		BaseContext: func(net.Listener) context.Context { return ctx },
@@ -137,6 +189,9 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 // SARVAM_API_KEY is set, rules otherwise.
 func newCorrector(log *slog.Logger, fake bool, meter *translate.Meter) (*correct.Corrector, error) {
 	mode := os.Getenv("CORRECTION")
+	if fake {
+		mode = "rules"
+	}
 	key := os.Getenv("SARVAM_API_KEY")
 	if mode == "" {
 		mode = "rules"
@@ -312,6 +367,16 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 		translator = translate.Hedged{Inner: translate.Gemini{Client: c, Model: os.Getenv("TRANSLATE_MODEL")}}
 	default:
 		return nil, nil, nil, fmt.Errorf("unknown TRANSLATE_PROVIDER %q (sarvam, gemini, chat)", p)
+	}
+	if !fake {
+		if u := os.Getenv("ASR_BACKUP_URL"); u != "" {
+			backup := &asr.Whisper{URL: u, Model: os.Getenv("ASR_BACKUP_MODEL"), Key: os.Getenv("ASR_BACKUP_API_KEY"), Interim: 1500 * time.Millisecond}
+			engine = &asr.Failover{Primary: engine, Backup: backup}
+		}
+		if u := os.Getenv("TRANSLATE_BACKUP_URL"); u != "" {
+			backup := translate.Chat{URL: u, Model: os.Getenv("TRANSLATE_BACKUP_MODEL"), Key: os.Getenv("TRANSLATE_BACKUP_API_KEY")}
+			translator = &translate.Failover{Primary: translator, Backup: backup}
+		}
 	}
 	return engine, translator, meter, nil
 }
