@@ -36,10 +36,16 @@ let rooms = [];
 async function events() {
   rooms = await (await fetch('/api/rooms')).json();
   $('event-ids').replaceChildren(...rooms.map((r) => el('option', { value: r.id, textContent: r.title })));
+  for (const id of ['s-event', 'r-event']) {
+    const keep = $(id).value;
+    $(id).replaceChildren(...rooms.map((r) => el('option', { value: r.id, textContent: r.title })));
+    if (keep) $(id).value = keep;
+  }
+  langsFor();
   const rows = await Promise.all(rooms.map(async (r) => {
     const v = await api('GET', `/api/admin/events/${r.id}/context`);
     const p = v.pending;
-    const changes = [p.added.length && `add ${p.added.length}`, p.changed.length && `update ${p.changed.length}`, p.removed.length && `remove ${p.removed.length}`].filter(Boolean);
+    const changes = [p.added.length && `add ${p.added.length}`, p.changed.length && `update ${p.changed.length}`, p.removed.length && `remove ${p.removed.length}`, p.script && 'update the script'].filter(Boolean);
     const detail = [...p.added.map((t) => `+ ${t}`), ...p.changed.map((t) => `~ ${t}`), ...p.removed.map((t) => `− ${t}`)].join(', ');
     const publish = button('Publish a new version', async () => {
       const note = prompt(`Publish the bank for ${r.title}? It applies from the next line. Note (optional):`, '');
@@ -55,7 +61,7 @@ async function events() {
       }));
     return el('tr', {},
       el('th', { scope: 'row' }, r.title, el('span', { className: 'sub', textContent: `${r.id}${r.speaker ? ` · ${r.speaker}` : ''}` })),
-      el('td', {}, v.inForce ? `Version ${v.inForce}` : 'None', el('span', { className: 'sub', textContent: v.pinned ? `${v.pinned.entries.length} entries · ${new Date(v.pinned.createdAt).toLocaleString()}` : '' })),
+      el('td', {}, v.inForce ? `Version ${v.inForce}` : 'None', el('span', { className: 'sub', textContent: v.pinned ? `${v.pinned.entries.length} entries${v.scriptChunks ? ` · script, ${v.scriptChunks} passages` : ''} · ${new Date(v.pinned.createdAt).toLocaleString()}` : '' })),
       el('td', {}, changes.length ? changes.join(', ') : 'Nothing: up to date', el('span', { className: 'sub', textContent: detail })),
       el('td', { className: 'links' }, publish, ' ', ...older.flatMap((b) => [b, ' '])));
   }));
@@ -163,11 +169,97 @@ $('add').onclick = () => edit();
 for (const id of ['f-scope', 'f-status']) $(id).onchange = () => entries().catch(fail);
 $('f-q').oninput = () => entries().catch(fail);
 
+// ---------- scripts ----------
+async function scripts() {
+  const event = $('s-event').value;
+  if (!event) return;
+  const list = await api('GET', `/api/admin/events/${event}/scripts`);
+  $('scripts').replaceChildren(...list.map((s) => {
+    const boxes = s.candidates.map((c) => el('label', { className: 'checkbox' },
+      el('input', { type: 'checkbox', value: c.term }), el('span', { textContent: `${c.term} (${c.count}×, ${c.why})` })));
+    const add = button('Add the ticked terms to the bank as suggestions', async () => {
+      const terms = [...boxes].map((b) => b.querySelector('input')).filter((i) => i.checked).map((i) => i.value);
+      if (!terms.length) return;
+      const q = new URLSearchParams();
+      for (const t of terms) q.append('term', t);
+      await api('POST', `/api/admin/events/${event}/scripts/${s.id}/suggest`, q);
+      refresh();
+    }, false);
+    const retire = s.status === 'active' ? button('Retire', async () => {
+      if (!confirm(`Stop using "${s.name}"? It leaves the event at its next published version.`)) return;
+      await api('POST', `/api/admin/events/${event}/scripts/${s.id}/retire`);
+      scripts().catch(fail);
+    }) : '';
+    return el('section', { className: 'script-card' },
+      el('h3', { textContent: s.name }),
+      el('p', { className: 'sub', textContent: `${s.status} · ${s.chars} characters · ${s.chunks} passages · v${s.version} · ${new Date(s.uploadedAt).toLocaleString()}` }),
+      el('p', { className: 'preview', textContent: `${s.preview}${s.chars > s.preview.length ? '…' : ''}` }),
+      s.candidates.length ? el('fieldset', {}, el('legend', { textContent: 'Terms found in it that the bank does not have' }), ...boxes, el('p', {}, add)) : '',
+      el('p', {}, retire));
+  }));
+  if (!list.length) $('scripts').replaceChildren(el('p', { className: 'hint', textContent: 'No script for this event yet.' }));
+}
+
+$('s-event').onchange = () => scripts().catch(fail);
+$('script-form').onsubmit = async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData($('script-form'));
+  if (!fd.get('file')?.size) fd.delete('file');
+  try {
+    const res = await fetch(`/api/admin/events/${$('s-event').value}/scripts`, {
+      method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` }, body: fd,
+    });
+    if (!res.ok) throw new Error((await res.text()).trim());
+    $('script-form').reset();
+    refresh();
+  } catch (e) { fail(e); }
+};
+
+// ---------- rehearsal ----------
+function langsFor() {
+  const r = rooms.find((x) => x.id === $('r-event').value) ?? rooms[0];
+  if (!r) return;
+  $('r-lang').replaceChildren(...[r.source, ...r.targets].map((l) => el('option', { value: l, textContent: NAMES[l] ?? l })));
+}
+$('r-event').onchange = langsFor;
+
+const pct = (x) => `${(100 * x).toFixed(1)}%`;
+$('rehearse-form').onsubmit = async (ev) => {
+  ev.preventDefault();
+  $('r-run').disabled = true;
+  $('rehearsal').replaceChildren(el('p', { className: 'hint', textContent: 'Rehearsing… (about twice the recording\'s length)' }));
+  try {
+    const res = await fetch(`/api/admin/events/${$('r-event').value}/rehearse`, {
+      method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` }, body: new FormData($('rehearse-form')),
+    });
+    if (!res.ok) throw new Error((await res.text()).trim());
+    const r = await res.json();
+    const rows = r.steps.map((s) => el('tr', {},
+      el('th', { scope: 'row', textContent: s.name }),
+      el('td', { lang: r.lang, textContent: s.text }),
+      el('td', { className: 'num', textContent: s.score ? `${pct(s.score.wer)} words, ${pct(s.score.cer)} letters` : '—' }),
+      el('td', { className: 'num', textContent: s.score ? `${s.score.termsFound}/${s.score.terms} terms, ${s.score.inserted} inserted, numbers ${s.score.numbers}, negations ${s.score.negations}` : '—' }),
+      el('td', { textContent: (s.fixes ?? []).map((f) => `${f.from} → ${f.to} (${f.rule})`).join('; ') })));
+    $('rehearsal').replaceChildren(
+      el('p', { className: 'hint', textContent: `${r.seconds.toFixed(0)} s, bank version ${r.version || 'none'} with ${r.hints} hints.` }),
+      el('div', { className: 'table-wrap' }, el('table', {},
+        el('thead', {}, el('tr', {}, ...['Step', 'Text', 'Error rate', 'Terms, numbers, negations', 'Fixes'].map((h) => el('th', { scope: 'col', textContent: h })))),
+        el('tbody', {}, ...rows))),
+      el('h3', { textContent: 'Translations' }),
+      el('ul', { className: 'link-list' }, ...Object.entries(r.translations).map(([l, t]) => el('li', {}, el('strong', { textContent: `${NAMES[l] ?? l}: ` }), el('span', { lang: l, textContent: t })))),
+      ...(r.errors ?? []).map((e) => el('p', { className: 'error', textContent: e })));
+  } catch (e) {
+    $('rehearsal').replaceChildren(el('p', { className: 'error', textContent: e.message }));
+  } finally {
+    $('r-run').disabled = false;
+  }
+};
+
 async function refresh() {
   $('error').textContent = '';
   try {
     await events();
-    await Promise.all([suggestions(), entries(), corrections()]);
+    await Promise.all([suggestions(), entries(), corrections(), scripts()]);
   } catch (e) {
     fail(e);
   }

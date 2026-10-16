@@ -266,6 +266,29 @@ await bk.click('#events tr:has-text("sala-a") button:has-text("Publish")');
 await bk.waitForFunction(() => document.getElementById('events').textContent.includes('Version 1'), null, { timeout: 5000 })
   .then(() => check('version published and in force', true))
   .catch(async () => check('version published and in force', false, await bk.textContent('#events')));
+// Scripts and rehearsal on /bank.
+await bk.selectOption('#s-event', 'sala-a');
+await bk.fill('#script-form textarea[name=text]', 'Welcome to Nerdearla. Today we will talk about open source with Sarvam AI. Sarvam AI translates the talk.');
+await bk.fill('#script-form input[name=name]', 'Keynote');
+await bk.click('#script-form button[type=submit]');
+await bk.waitForFunction(() => document.getElementById('scripts').textContent.includes('Sarvam AI'), null, { timeout: 5000 })
+  .then(async () => check('script added, terms suggested', (await bk.textContent('#scripts')).includes('1 passages')))
+  .catch(async () => check('script added, terms suggested', false, await bk.textContent('#scripts')));
+const wav = (() => { // 3 s of silence, 16 kHz mono PCM16
+  const n = 16000 * 2 * 3;
+  const b = Buffer.alloc(44 + n);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22); b.writeUInt32LE(16000, 24); b.writeUInt32LE(32000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+  b.write('data', 36); b.writeUInt32LE(n, 40);
+  return b;
+})();
+await bk.selectOption('#r-event', 'sala-a');
+await bk.setInputFiles('#rehearse-form input[name=audio]', { name: 'test.wav', mimeType: 'audio/wav', buffer: wav });
+await bk.fill('#rehearse-form textarea[name=reference]', 'Welcome to Nerdearla. Today we will talk about open source.');
+await bk.click('#r-run');
+await bk.waitForFunction(() => document.getElementById('rehearsal').textContent.includes('Recognition with the bank'), null, { timeout: 15000 })
+  .then(async () => check('rehearsal shows steps and scores', (await bk.textContent('#rehearsal')).includes('% words')))
+  .catch(async () => check('rehearsal shows steps and scores', false, await bk.textContent('#rehearsal')));
 const st = (await (await get('/api/admin/status', { headers: { Authorization: `Bearer ${TOKEN}` } })).json()).find((r) => r.id === 'sala-a');
 check('the room uses the published version', st.contextVersion === 1 && st.contextEntries === 1, JSON.stringify([st.contextVersion, st.contextEntries]));
 

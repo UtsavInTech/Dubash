@@ -59,6 +59,28 @@
       </table>
     </div>
 
+    <h2>Scripts</h2>
+    <p class="hint">What the speaker plans to say: it helps the correction stage tell a name from a mis-hearing. It is context only: nothing from it is shown unless the speaker says it, and a number or a "not" the speaker says differently is never changed to match it. Upload .txt, .md or .docx, or paste the text; publish the event's version to use it.</p>
+    <form id="script-form" class="toolbar">
+      <label class="field"><span>Event</span><select id="s-event" name="event"></select></label>
+      <label class="field"><span>File</span><input type="file" name="file" accept=".txt,.md,.docx"></label>
+      <label class="field"><span>Name</span><input name="name" autocomplete="off" placeholder="Day 1 keynote"></label>
+      <label class="field wide"><span>Or paste the text</span><textarea name="text" rows="3"></textarea></label>
+      <span class="row"><button class="button" type="submit">Add the script</button></span>
+    </form>
+    <div id="scripts"></div>
+
+    <h2>Rehearsal</h2>
+    <p class="hint">Record a minute or two with the hard words (names, places, numbers) as a WAV file, and give the exact text that was said if you have it. You will see recognition without and with the bank, the corrections, the scores and the translations. Up to 3 minutes; it is billed twice.</p>
+    <form id="rehearse-form" class="toolbar">
+      <label class="field"><span>Event</span><select id="r-event" name="event"></select></label>
+      <label class="field"><span>Spoken in</span><select id="r-lang" name="lang"></select></label>
+      <label class="field"><span>Recording (WAV)</span><input type="file" name="audio" accept=".wav,audio/wav" required></label>
+      <label class="field wide"><span>What was said (optional, for scores)</span><textarea name="reference" rows="3"></textarea></label>
+      <span class="row"><button class="button" type="submit" id="r-run">Rehearse</button></span>
+    </form>
+    <div id="rehearsal" aria-live="polite"></div>
+
     <h2>Recent live fixes</h2>
     <ul id="corrections" class="link-list"></ul>
   </main>

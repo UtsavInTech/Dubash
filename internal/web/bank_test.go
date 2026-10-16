@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -17,6 +18,8 @@ import (
 
 	"github.com/UtsavInTech/dubash/internal/asr"
 	"github.com/UtsavInTech/dubash/internal/bank"
+	"github.com/UtsavInTech/dubash/internal/bench"
+	"github.com/UtsavInTech/dubash/internal/rehearse"
 )
 
 // call sends an authorized request and decodes the JSON answer into out.
@@ -151,3 +154,66 @@ func TestBankFlow(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// TestScriptsAndRehearsal: upload a script, see its candidate terms, add
+// one to the bank, publish (the version carries the script), and rehearse
+// a recording with a reference.
+func TestScriptsAndRehearsal(t *testing.T) {
+	srv := newTestServer(t)
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, _ := mw.CreateFormFile("file", "keynote.txt")
+	fw.Write([]byte("Welcome to Nerdearla. Today we will talk about open source with Sarvam AI and Sarvam AI again.\n\nThese captions are generated live."))
+	mw.Close()
+	req, _ := http.NewRequest("POST", srv.URL+"/api/admin/events/sala-a/scripts", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sv scriptView
+	json.NewDecoder(resp.Body).Decode(&sv)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || sv.Name != "keynote.txt" || sv.Chunks != 1 || sv.Text != "" || len(sv.Candidates) == 0 || sv.Candidates[0].Term != "Sarvam AI" {
+		t.Fatalf("upload %d %+v", resp.StatusCode, sv)
+	}
+	var sug map[string][]string
+	call(t, "POST", srv.URL+"/api/admin/events/sala-a/scripts/"+sv.ID+"/suggest", url.Values{"term": {"Sarvam AI", "not in the script"}}, &sug)
+	if len(sug["suggested"]) != 1 {
+		t.Fatalf("suggested %v", sug)
+	}
+	var e bank.Entry
+	call(t, "POST", srv.URL+"/api/admin/bank/entries/"+sug["suggested"][0]+"/approve", nil, &e)
+	var v bank.Version
+	call(t, "POST", srv.URL+"/api/admin/events/sala-a/context", nil, &v)
+	if len(v.Script) != 1 || len(v.Entries) != 1 {
+		t.Fatalf("version %+v", v)
+	}
+	if code := call(t, "POST", srv.URL+"/api/admin/events/sala-a/scripts", url.Values{"text": {"  "}}, nil); code != 400 {
+		t.Fatalf("empty paste: %d", code)
+	}
+
+	// Rehearsal: 3 s of audio, scripted engine, with a reference.
+	body.Reset()
+	mw = multipart.NewWriter(body)
+	fw, _ = mw.CreateFormFile("audio", "test.wav")
+	fw.Write(bench.EncodeWAV(make([]byte, 3*asr.BytesPerSecond)))
+	mw.WriteField("lang", "en")
+	mw.WriteField("reference", "Welcome to Nerdearla. Today we will talk about open source. These captions are generated live.")
+	mw.Close()
+	req, _ = http.NewRequest("POST", srv.URL+"/api/admin/events/sala-a/rehearse", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer secret")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rep rehearse.Report
+	json.NewDecoder(resp.Body).Decode(&rep)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || len(rep.Steps) != 2 || rep.Steps[0].Score == nil || rep.Steps[0].Score.WER != 0 ||
+		rep.Translations["es"] == "" || rep.Version != 1 || rep.Hints != 1 {
+		t.Fatalf("rehearsal %d %+v", resp.StatusCode, rep)
+	}
+}

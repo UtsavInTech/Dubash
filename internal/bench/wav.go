@@ -27,6 +27,9 @@ func ReadWAV(path string) ([]byte, error) {
 	return decodeWAV(f)
 }
 
+// DecodeWAV is ReadWAV for a stream (an upload).
+func DecodeWAV(r io.Reader) ([]byte, error) { return decodeWAV(r) }
+
 func decodeWAV(r io.Reader) ([]byte, error) {
 	var riff [12]byte
 	if _, err := io.ReadFull(r, riff[:]); err != nil {

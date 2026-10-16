@@ -21,6 +21,7 @@ import (
 	"github.com/UtsavInTech/dubash/internal/asr"
 	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/correct"
 	"github.com/UtsavInTech/dubash/internal/room"
 	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
@@ -63,7 +64,11 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		log.Warn("ADMIN_TOKEN is not set: anyone can stream audio and see the admin panel")
 	}
 
-	deps := room.Deps{ASR: engine, Translator: translator, Store: st, Log: log}
+	corrector, err := newCorrector(log, fake, meter)
+	if err != nil {
+		return err
+	}
+	deps := room.Deps{ASR: engine, Translator: translator, Store: st, Log: log, Corrector: corrector}
 	var rs []*room.Room
 	for _, rc := range cfg.Rooms {
 		rm, err := room.New(rc, deps)
@@ -121,6 +126,44 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		log.Warn("rooms still running at exit", "err", werr)
 	}
 	return err
+}
+
+// newCorrector sets up the correction stage. CORRECTION is off, rules
+// (the Dictation Bank's mis-hearings and near misses only) or model
+// (rules, then Sarvam's chat model with the bank and the script, within
+// CORRECTION_DEADLINE_MS, default 800). The default is model when
+// SARVAM_API_KEY is set, rules otherwise.
+func newCorrector(log *slog.Logger, fake bool, meter *translate.Meter) (*correct.Corrector, error) {
+	mode := os.Getenv("CORRECTION")
+	key := os.Getenv("SARVAM_API_KEY")
+	if mode == "" {
+		mode = "rules"
+		if key != "" && !fake {
+			mode = "model"
+		}
+	}
+	deadline := 800 * time.Millisecond
+	if v := os.Getenv("CORRECTION_DEADLINE_MS"); v != "" {
+		ms, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("CORRECTION_DEADLINE_MS: %w", err)
+		}
+		deadline = time.Duration(ms) * time.Millisecond
+	}
+	switch mode {
+	case "off":
+		return nil, nil
+	case "rules":
+		return &correct.Corrector{}, nil
+	case "model":
+		if key == "" {
+			return nil, errors.New("CORRECTION=model needs SARVAM_API_KEY")
+		}
+		chat := translate.SarvamChat{Key: key, Model: os.Getenv("SARVAM_CHAT_MODEL"), Meter: meter, Log: log}
+		log.Info("correction stage: dictation bank rules and model", "deadline", deadline)
+		return &correct.Corrector{Model: correct.LLM{Chat: chat}, Deadline: deadline}, nil
+	}
+	return nil, fmt.Errorf("unknown CORRECTION %q (off, rules, model)", mode)
 }
 
 // openBank opens the Dictation Bank: PostgreSQL at DATABASE_URL, or a JSON

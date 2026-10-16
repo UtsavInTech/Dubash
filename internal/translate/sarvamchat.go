@@ -184,6 +184,12 @@ func (s SarvamChat) logf(format string, args ...any) {
 	}
 }
 
+// Complete asks the chat model for one answer, under the same limiter
+// and meter as translations (the correction stage uses it).
+func (s SarvamChat) Complete(ctx context.Context, system, user string, maxTokens int) (string, error) {
+	return s.complete(ctx, system, user, maxTokens)
+}
+
 func (s SarvamChat) complete(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	if s.Limiter != nil {
 		if err := s.Limiter.Wait(ctx); err != nil {

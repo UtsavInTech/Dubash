@@ -28,6 +28,8 @@ type Segment struct {
 	Text      string    `json:"text"`
 	// Raw is the recognized text when Text was corrected.
 	Raw string `json:"raw,omitempty"`
+	// Fixes are the corrections made to Raw, with what supports each.
+	Fixes []Fix `json:"fixes,omitempty"`
 	// Translations maps a language code to the text in that language.
 	Translations map[string]string `json:"translations,omitempty"`
 	Error        string            `json:"error,omitempty"`
@@ -43,6 +45,15 @@ func (s Segment) In(lang string) string {
 		return t
 	}
 	return s.Text
+}
+
+// Fix is one correction of a recognized line: From became To, by a rule
+// ("misheard", "fuzzy", "model") and the bank entry behind it.
+type Fix struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Rule  string `json:"rule"`
+	Entry string `json:"entry,omitempty"`
 }
 
 // Translation is one segment in one target language, sent to the readers

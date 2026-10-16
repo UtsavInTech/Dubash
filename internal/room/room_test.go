@@ -19,6 +19,7 @@ import (
 	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/caption"
 	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/correct"
 	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
 )
@@ -843,5 +844,34 @@ func TestBackfillTranslatesTheHistory(t *testing.T) {
 	}
 	if r := rm.Hub().Recent(); r[0].Translations["te"] != "[te] एक।" {
 		t.Fatalf("replay for later readers: %+v", r[0])
+	}
+}
+
+// TestRoomCorrectsBeforePublishing: a known mis-hearing in the pinned
+// version is fixed before readers, the translator and the store see the
+// line; the recognized text and the fix are kept.
+func TestRoomCorrectsBeforePublishing(t *testing.T) {
+	rec := &recording{lines: []string{"डबस में स्वागत है।"}}
+	st := newStore(t)
+	rm, err := New(config.Room{ID: "hall", Source: "hi", Targets: []string{"te"}},
+		Deps{ASR: rec, Translator: rec, Store: st, Log: slog.New(slog.DiscardHandler), Corrector: &correct.Corrector{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rm.SetVersion(version(1, bank.Entry{ID: "d", Scope: bank.ScopeEvent, ScopeID: "hall", Term: "Dubash", Misheard: []string{"डबस"}}))
+	sub, _, cancel := rm.Hub().Subscribe(64, "te", "")
+	defer cancel()
+	audio := make(chan []byte)
+	close(audio)
+	if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+		t.Fatal(err)
+	}
+	got := finals(sub)
+	if len(got) != 1 || got[0].Text != "Dubash में स्वागत है।" || got[0].Raw != "डबस में स्वागत है।" ||
+		len(got[0].Fixes) != 1 || got[0].Fixes[0].Entry != "d" || got[0].Translations["te"] != "[te] Dubash में स्वागत है।" {
+		t.Fatalf("published %+v", got)
+	}
+	if s := rm.Status(); s.Correction.N != 1 {
+		t.Errorf("status %+v", s.Correction)
 	}
 }

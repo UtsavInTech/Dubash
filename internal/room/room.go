@@ -23,6 +23,8 @@ import (
 	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/caption"
 	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/correct"
+	"github.com/UtsavInTech/dubash/internal/script"
 	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
 )
@@ -78,6 +80,9 @@ type Deps struct {
 	Translator translate.Translator
 	Store      *store.Store
 	Log        *slog.Logger
+	// Corrector, if set, fixes each committed line with the Dictation Bank
+	// and the script before it is published.
+	Corrector *correct.Corrector
 }
 
 // Transmission describes one operator session.
@@ -147,6 +152,12 @@ type Status struct {
 	TranslatedChars map[string]int64 `json:"translatedChars,omitempty"`
 	// Cost is filled in by the web layer from these counts and prices.
 	Cost *Cost `json:"cost,omitempty"`
+	// Correction is the time the correction stage took per line, and
+	// CorrectionTimeouts how often the model missed its deadline.
+	Correction         Latency `json:"correction"`
+	CorrectionTimeouts int     `json:"correctionTimeouts"`
+	// ScriptChunks is the size of the script in force (0: none).
+	ScriptChunks int `json:"scriptChunks"`
 	// ContextVersion is the Dictation Bank version in force (0: none).
 	ContextVersion int `json:"contextVersion"`
 	ContextEntries int `json:"contextEntries"`
@@ -170,6 +181,9 @@ type Room struct {
 	// vocab is the pinned Dictation Bank context, swapped whole when the
 	// admin pins a new version; the live path never reads the bank store.
 	vocab atomic.Pointer[bank.Context]
+	// aligner follows the speaker through vocab's script; replaced with
+	// vocab. Only the Run goroutine uses it.
+	aligner atomic.Pointer[script.Aligner]
 
 	mu        sync.Mutex
 	live      bool
@@ -200,9 +214,11 @@ type Room struct {
 	trLat     map[string][]time.Duration
 	dropped   map[string]int
 	// backfilling marks languages whose history is being translated.
-	backfilling map[string]bool
-	audioTotal  int64            // bytes sent to recognition since start
-	trChars     map[string]int64 // characters sent for translation, per language
+	backfilling  map[string]bool
+	audioTotal   int64            // bytes sent to recognition since start
+	trChars      map[string]int64 // characters sent for translation, per language
+	corrLat      []time.Duration  // correction stage time per line
+	corrTimeouts int
 }
 
 // New builds a room and restores its recent history from the store.
@@ -219,6 +235,7 @@ func New(cfg config.Room, deps Deps) (*Room, error) {
 		trLat: map[string][]time.Duration{}, dropped: map[string]int{}, backfilling: map[string]bool{}, trChars: map[string]int64{},
 	}
 	r.vocab.Store(bank.NewContext(bank.Version{Event: cfg.ID}, cfg.Glossary))
+	r.aligner.Store(script.NewAligner(r.vocab.Load().Index))
 	if n := len(seed); n > 0 {
 		last := seed[n-1]
 		for _, s := range seed {
@@ -237,7 +254,9 @@ func New(cfg config.Room, deps Deps) (*Room, error) {
 // SetVersion makes v the room's Dictation Bank context, from the next
 // committed line on. rooms.yaml's glossary stays in force beside it.
 func (r *Room) SetVersion(v bank.Version) {
-	r.vocab.Store(bank.NewContext(v, r.cfg.Glossary))
+	c := bank.NewContext(v, r.cfg.Glossary)
+	r.vocab.Store(c)
+	r.aligner.Store(script.NewAligner(c.Index))
 	r.deps.Log.Info("dictation bank version in force", "room", r.cfg.ID, "version", v.Number, "entries", len(v.Entries))
 }
 
@@ -429,6 +448,9 @@ func (r *Room) translateLines(ctx context.Context, lines []string, src, dst stri
 // Context returns the Dictation Bank context in force.
 func (r *Room) Context() *bank.Context { return r.vocab.Load() }
 
+// Deps returns the room's collaborators (for rehearsals).
+func (r *Room) Deps() Deps { return r.deps }
+
 // Config returns the room's configuration.
 func (r *Room) Config() config.Room { return r.cfg }
 
@@ -550,6 +572,7 @@ func (r *Room) Run(ctx context.Context, t Transmission, audio <-chan []byte) err
 		close(events)
 	}()
 
+	var recent []string // the last committed lines, context for corrections
 	for ev := range events {
 		if ev.Kind != asr.Error {
 			r.mu.Lock()
@@ -560,13 +583,19 @@ func (r *Room) Run(ctx context.Context, t Transmission, audio <-chan []byte) err
 		case asr.Interim:
 			r.hub.Publish(Msg{Event: "interim", Data: caption.Interim{Epoch: epoch, Lang: lang, Text: ev.Text}})
 		case asr.Final:
+			text, raw, fixes := r.correct(ctx, ev.Text, lang, recent)
+			recent = append(recent, text)
+			if len(recent) > 2 {
+				recent = recent[1:]
+			}
 			r.mu.Lock()
 			t0 := r.lastT1
 			t1 := max(base+ev.At, t0)
 			r.lastT1 = t1
 			seg := caption.Segment{
 				ID: r.nextID, Room: r.cfg.ID, Epoch: epoch, Talk: r.talk, TalkTitle: r.talkTitle,
-				At: time.Now().UTC().Truncate(time.Millisecond), T0: t0, T1: t1, Lang: lang, Text: ev.Text,
+				At: time.Now().UTC().Truncate(time.Millisecond), T0: t0, T1: t1, Lang: lang, Text: text,
+				Raw: raw, Fixes: fixes,
 			}
 			r.nextID++
 			r.segments++
@@ -595,6 +624,35 @@ func (r *Room) Run(ctx context.Context, t Transmission, audio <-chan []byte) err
 		return ErrEnded
 	}
 	return err
+}
+
+// correct runs the correction stage on a recognized line, with the
+// version in force and the script position. It returns the text to
+// publish and, when it changed, the recognized text and the fixes.
+func (r *Room) correct(ctx context.Context, text, lang string, previous []string) (string, string, []caption.Fix) {
+	c := r.deps.Corrector
+	if c == nil {
+		return text, "", nil
+	}
+	vocab, al := r.Context(), r.aligner.Load()
+	pos, conf := al.Observe(text)
+	res := c.Correct(ctx, correct.Input{
+		Text: text, Lang: lang, Entries: vocab.Entries(), Script: al.Window(pos), ScriptConf: conf, Previous: previous,
+	})
+	r.mu.Lock()
+	r.corrLat = keep(r.corrLat, res.Took)
+	if res.TimedOut {
+		r.corrTimeouts++
+	}
+	r.mu.Unlock()
+	if res.Text == text {
+		return text, "", nil
+	}
+	fixes := make([]caption.Fix, len(res.Edits))
+	for i, e := range res.Edits {
+		fixes[i] = caption.Fix{From: e.From, To: e.To, Rule: e.Rule, Entry: e.Entry}
+	}
+	return res.Text, text, fixes
 }
 
 func keep(s []time.Duration, d time.Duration) []time.Duration {
@@ -717,6 +775,7 @@ func (r *Room) Status() Status {
 	}
 	return Status{
 		AudioTotalSeconds: float64(r.audioTotal) / asr.BytesPerSecond, TranslatedChars: chars,
+		Correction: summarize(r.corrLat), CorrectionTimeouts: r.corrTimeouts, ScriptChunks: vocab.Index.Len(),
 		ContextVersion: vocab.Version.Number, ContextEntries: len(vocab.Version.Entries),
 		ID: r.cfg.ID, Title: r.cfg.Title, Speaker: r.cfg.Speaker, Source: r.speaking, Targets: r.targets(r.speaking),
 		Live: r.live, Paused: r.paused, Ended: r.ended, Epoch: r.epoch,
