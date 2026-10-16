@@ -406,9 +406,11 @@ func TestPauseKeepsAudioFromTheRecognizer(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- rm.Run(context.Background(), Transmission{}, audio) }()
 	chunk := make([]byte, asr.BytesPerSecond/10)
+	sent := time.Now()
 	audio <- chunk
+	// Pause only once the meter has looked at the first chunk.
+	waitFor(t, func() bool { return !rm.Status().LastAudioAt.Before(sent) })
 	rm.Pause()
-	var sent time.Time
 	for range 5 {
 		sent = time.Now()
 		audio <- chunk
