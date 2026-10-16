@@ -287,6 +287,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	hub := rm.Hub()
 	msgs, replay, cancel := hub.Subscribe(64, lang, lastID)
 	defer cancel()
+	if lang != "" && lastID == "" {
+		// A reader opening a language gets the history in it.
+		rm.Backfill(lang)
+	}
 	writeEvent(w, "status", rm.StatusEvent())
 	for _, m := range replay {
 		writeMsg(w, m, hub.Instance())

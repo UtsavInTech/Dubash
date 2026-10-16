@@ -796,3 +796,46 @@ func TestCorrectPublishesARevision(t *testing.T) {
 		t.Fatalf("an identical text made a new revision: %+v", same)
 	}
 }
+
+// TestBackfillTranslatesTheHistory: a reader who opens a language after
+// lines were spoken gets them translated, once, in batches.
+func TestBackfillTranslatesTheHistory(t *testing.T) {
+	b := &batcher{}
+	lines := []string{"एक।", "दो।", "तीन।", "चार।", "पाँच।"}
+	rm := newRoomWith(t, config.Room{ID: "a", Source: "hi", Targets: []string{"te"}}, newStore(t), &recording{lines: lines}, b)
+	audio := make(chan []byte)
+	close(audio)
+	if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.batches)+b.singles != 0 {
+		t.Fatal("translated with no reader")
+	}
+	sub, _, cancel := rm.Hub().Subscribe(64, "te", "")
+	defer cancel()
+	rm.Backfill("te")
+	got := map[int]string{}
+	deadline := time.After(2 * time.Second)
+	for len(got) < len(lines) {
+		select {
+		case m := <-sub:
+			if tr, ok := m.Data.(caption.Translation); ok {
+				got[tr.Segment] = tr.Text
+			}
+		case <-deadline:
+			t.Fatalf("history translated: %v", got)
+		}
+	}
+	if got[4] != "[te] पाँच।" || len(b.batches) != 1 {
+		t.Fatalf("got %v in %d batches", got, len(b.batches))
+	}
+	rm.Backfill("te") // nothing left to translate
+	rm.Backfill("hi") // the spoken language needs none
+	time.Sleep(50 * time.Millisecond)
+	if len(b.batches) != 1 || b.singles != 0 {
+		t.Fatalf("translated again: %d batches, %d singles", len(b.batches), b.singles)
+	}
+	if r := rm.Hub().Recent(); r[0].Translations["te"] != "[te] एक।" {
+		t.Fatalf("replay for later readers: %+v", r[0])
+	}
+}

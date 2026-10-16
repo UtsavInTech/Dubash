@@ -501,7 +501,14 @@ function connect() {
       renderInterim();
     }
   });
-  events.addEventListener('caught-up', () => { caughtUp = true; });
+  events.addEventListener('caught-up', () => {
+    caughtUp = true;
+    // The server translates the history into a language its reader just
+    // opened: show those lines as on their way, for a while.
+    const now = Date.now();
+    for (const s of segments.values()) if (s.lang !== lang && !s.translations?.[lang]) s.live = now;
+    renderLines();
+  });
   events.onopen = () => { reconnecting = false; renderBanner(); };
   events.onerror = () => {
     caughtUp = false;

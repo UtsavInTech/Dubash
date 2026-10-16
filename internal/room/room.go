@@ -182,6 +182,8 @@ type Room struct {
 	commitLag []time.Duration
 	trLat     map[string][]time.Duration
 	dropped   map[string]int
+	// backfilling marks languages whose history is being translated.
+	backfilling map[string]bool
 }
 
 // New builds a room and restores its recent history from the store.
@@ -195,7 +197,7 @@ func New(cfg config.Room, deps Deps) (*Room, error) {
 	}
 	r := &Room{
 		cfg: cfg, deps: deps, hub: NewHub(ringSize, seed), speaking: cfg.Source, level: asr.DBFS(0),
-		trLat: map[string][]time.Duration{}, dropped: map[string]int{},
+		trLat: map[string][]time.Duration{}, dropped: map[string]int{}, backfilling: map[string]bool{},
 	}
 	r.vocab.Store(bank.NewContext(bank.Version{Event: cfg.ID}, cfg.Glossary))
 	if n := len(seed); n > 0 {
@@ -289,6 +291,104 @@ func (r *Room) Correct(ctx context.Context, id int, text string) (before, after 
 		}
 	}()
 	return before, after, nil
+}
+
+// backfillBatch is the most lines translated together when a reader
+// opens a language: the history is long, and one request costs the same
+// rate-limit slot whatever its size.
+const backfillBatch = 20
+
+// Backfill translates the recent lines that have no translation into lang
+// yet, so a reader who opens lang sees the history in it, not only what
+// is said from now on. Each line is translated once per language: later
+// readers get it from the replay. It runs in the background; a backfill
+// already running for lang makes it return at once.
+func (r *Room) Backfill(lang string) {
+	if !slices.Contains(r.cfg.Languages(), lang) {
+		return
+	}
+	r.mu.Lock()
+	if r.backfilling[lang] {
+		r.mu.Unlock()
+		return
+	}
+	r.backfilling[lang] = true
+	r.mu.Unlock()
+	go func() {
+		defer func() {
+			r.mu.Lock()
+			delete(r.backfilling, lang)
+			r.mu.Unlock()
+		}()
+		var todo []caption.Segment
+		for _, s := range r.hub.Recent() {
+			if s.Lang != lang && s.Translations[lang] == "" {
+				todo = append(todo, s)
+			}
+		}
+		if len(todo) == 0 {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*translateTimeout)
+		defer cancel()
+		vocab := r.Context()
+		for len(todo) > 0 {
+			// One batch: consecutive lines in the same spoken language.
+			n, chars := 0, 0
+			for n < len(todo) && n < backfillBatch && todo[n].Lang == todo[0].Lang {
+				if chars += len([]rune(todo[n].Text)) + 1; chars > translate.MaxBatchChars && n > 0 {
+					break
+				}
+				n++
+			}
+			batch := todo[:n]
+			todo = todo[n:]
+			src := batch[0].Lang
+			lines := make([]string, len(batch))
+			for i, s := range batch {
+				lines[i] = s.Text
+			}
+			outs, err := r.translateLines(ctx, lines, src, lang, vocab.Glossary(src, lang))
+			if err != nil {
+				r.recordError(fmt.Sprintf("history into %s: %v", lang, err))
+				return
+			}
+			for i, s := range batch {
+				if outs[i] == "" {
+					continue
+				}
+				r.hub.Publish(Msg{Event: "translation", Lang: lang, Segment: s.ID, Data: caption.Translation{
+					Room: s.Room, Segment: s.ID, Epoch: s.Epoch, Rev: s.Rev, Lang: lang, Text: outs[i],
+				}})
+			}
+		}
+	}()
+}
+
+// translateLines translates lines in one request when the translator can,
+// else one by one; failed lines come back empty.
+func (r *Room) translateLines(ctx context.Context, lines []string, src, dst string, g translate.Glossary) ([]string, error) {
+	if b, ok := r.deps.Translator.(translate.Batcher); ok && len(lines) > 1 {
+		out, err := b.TranslateBatch(ctx, lines, src, dst, g)
+		if err == nil {
+			return out, nil
+		}
+		if !errors.Is(err, translate.ErrBatchSplit) {
+			return nil, err
+		}
+	}
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		t, err := r.deps.Translator.Translate(ctx, l, src, dst, g)
+		if err != nil {
+			if i == 0 {
+				return nil, err
+			}
+			continue
+		}
+		out[i] = t
+	}
+	return out, nil
 }
 
 // Context returns the Dictation Bank context in force.
