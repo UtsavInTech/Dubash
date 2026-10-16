@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Steps, the room configuration (rooms.yaml) and the audio source you used.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server log lines and the error shown in the production panel. Remove tokens and API keys.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit or release, and how you run it (Docker, go run, binary).
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Models
+      options:
+        - Gemini
+        - Local (Whisper / OpenAI-compatible)
+        - Mixed
+        - -fake

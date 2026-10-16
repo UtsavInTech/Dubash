@@ -1,0 +1,9 @@
+lang: en
+vocabulary: demo-india
+tags: [synthetic, names, numbers, negation]
+reference: >-
+  Good morning everyone. Welcome to the Dubash pilot in Bengaluru. Our
+  partner Sarvam AI will translate this keynote into Hindi, Telugu and
+  Kannada. Registration closes on 15 March, and tickets cost 499 rupees. We
+  will not record this session.
+notes: macOS voice Rishi (en_IN). Synthetic; smoke test only.

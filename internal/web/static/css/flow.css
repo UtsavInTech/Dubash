@@ -1,0 +1,145 @@
+/* The organiser studio in the Wispr Flow manner: a quiet sidebar, one large
+   rounded canvas, black pills and a lavender-to-coral glow for what matters.
+   Loaded after workspace.css; it restyles, it does not change the markup's
+   behaviour. */
+.workspace {
+  --bg: #f4f1ec;
+  --surface: #fbfaf7;
+  --canvas: #ffffff;
+  --text: #1c1930;
+  --text-2: #6a6580;
+  --border: #ebe7ef;
+  --border-strong: #1c1930;
+  --link: #5b4bd6;
+  --link-hover: #3f31b0;
+  --primary: #1c1930;
+  --primary-text: #fff;
+  --live: #12a594;
+  --lav: #7c6cf2;
+  --lav-soft: #f1edff;
+  --teal-soft: #e3f7f3;
+  --coral: #f2765f;
+  --glow: linear-gradient(100deg, #7c6cf2 0%, #b78cf7 45%, #f2765f 100%);
+  --r-lg: 28px;
+  --r-md: 18px;
+  --r-sm: 12px;
+  background: var(--bg);
+  color: var(--text);
+}
+.workspace .accent { background: var(--glow); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Sidebar: the header becomes a column on wide screens. */
+@media (min-width: 900px) {
+  .admin-workspace .app-header {
+    position: fixed; inset: 0 auto 0 0; width: 248px; height: auto; z-index: 4;
+    flex-direction: column; align-items: stretch; gap: 6px;
+    padding: 26px 16px 22px; background: var(--bg); border: 0;
+  }
+  .admin-workspace .app-header .wordmark { font-size: 22px; padding: 0 10px 22px; }
+  .admin-workspace .wordmark-note { display: none; }
+  .admin-workspace .app-header nav { flex-direction: column; align-items: stretch; gap: 2px; margin: 0; }
+  .admin-workspace .app-header nav a {
+    display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--r-sm);
+    font-size: 15px; color: var(--text-2);
+  }
+  .admin-workspace .app-header nav a:hover { background: #ebe7e0; color: var(--text); }
+  .admin-workspace .app-header nav a[aria-current] { background: var(--canvas); color: var(--text); box-shadow: 0 1px 2px #1c193014, 0 6px 16px -10px #1c193033; }
+  .admin-workspace .app-header nav a::before {
+    content: ""; width: 18px; height: 18px; flex: none; border-radius: 6px; background: currentColor; opacity: .55;
+    -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat;
+  }
+  .admin-workspace .app-header nav a[href="/admin"] { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 5h16v4H4zM4 11h16v8H4z'/%3E%3C/svg%3E"); }
+  .admin-workspace .app-header nav a[href="/bank"] { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 3h11l3 3v15H5zM8 9h8v2H8zm0 4h8v2H8z'/%3E%3C/svg%3E"); }
+  .admin-workspace .app-header nav a[href="/"] { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 5c5 0 9 4.5 10 7-1 2.5-5 7-10 7S3 14.5 2 12c1-2.5 5-7 10-7zm0 3a4 4 0 100 8 4 4 0 000-8z'/%3E%3C/svg%3E"); }
+  .admin-workspace .app-header nav a[aria-current]::before { opacity: 1; background: var(--glow); }
+  .admin-workspace .app-header .quiet-button { text-align: left; padding: 10px 14px; border-radius: var(--r-sm); font-size: 14px; }
+  .admin-workspace .app-header .quiet-button:hover { background: #ebe7e0; color: var(--text); }
+  .admin-workspace #account { margin-top: auto; }
+
+  /* The canvas: one large white panel beside the sidebar. */
+  .admin-workspace .deployment-notice, .admin-workspace .notice { margin-left: 248px; }
+  .admin-workspace .workspace-main {
+    margin: 12px 12px 12px 248px; max-width: none; min-height: calc(100vh - 24px);
+    background: var(--canvas); border-radius: var(--r-lg); padding: 44px 52px 40px;
+    box-shadow: 0 1px 2px #1c19300d, 0 20px 50px -30px #1c193040;
+  }
+  .admin-workspace .studio-footer { margin-left: 248px; }
+}
+
+/* Brand mark: the glow, a soft wave. */
+.workspace .brand-mark {
+  background: var(--glow); border-radius: 10px; width: 32px; height: 32px; font-size: 0; padding: 0;
+  -webkit-mask: none;
+}
+.workspace .brand-mark::after {
+  content: ""; width: 20px; height: 20px; background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 19c3.5-10 7.5-10 11 0s7.5 10 11 0' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 19c3.5-10 7.5-10 11 0s7.5 10 11 0' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.workspace .brand-mark > span { display: none; }
+
+/* Notices: soft lavender, not alarm orange. */
+.workspace .deployment-notice, .workspace .notice {
+  background: var(--lav-soft); color: #3f31b0; border: 0; border-radius: var(--r-md);
+  margin-top: 12px; margin-right: 12px; padding: 12px 20px;
+}
+
+/* Headings: big and calm. */
+.workspace h1 { font-size: clamp(32px, 3.4vw, 46px); letter-spacing: -0.04em; }
+.workspace .eyebrow { color: var(--lav); letter-spacing: .1em; }
+
+/* Buttons: pills. Primary is black; the main call gets the glow. */
+.workspace .button {
+  border-radius: 999px; min-height: 44px; padding: 0 22px; font-weight: 600;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.workspace .button:hover { transform: translateY(-1px); }
+.workspace .button.primary { background: var(--primary); color: #fff; }
+.workspace .button.primary:hover { background: #2d2948; color: #fff; }
+.workspace #create-open, .workspace #create-empty, .workspace #open-console {
+  background: var(--glow); box-shadow: 0 10px 26px -10px #7c6cf2aa, inset 0 1px 0 #ffffff40;
+}
+.workspace .button.secondary { background: var(--canvas); border-color: var(--border); }
+.workspace .button.secondary:hover { border-color: #d6d0e2; }
+.workspace .text-button, .workspace .quiet-button { color: var(--text-2); }
+
+/* Summary strip: chips instead of rules. */
+.workspace .studio-summary { border: 0; gap: 10px; padding: 0; margin-bottom: 28px; flex-wrap: wrap; }
+.workspace .studio-summary > span:not(.summary-update) { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; }
+.workspace .live-dot { background: var(--live); box-shadow: 0 0 0 4px #12a59426; }
+
+/* Event list: soft rounded rows. */
+.workspace .event-sidebar { border-right: 0; padding-right: 0; }
+.workspace .count { background: var(--lav-soft); color: var(--lav); border-radius: 999px; padding: 2px 9px; }
+.workspace .event-item { border-radius: var(--r-md); padding: 16px 18px; }
+.workspace .event-item:hover { background: var(--surface); }
+.workspace .event-item[aria-pressed="true"] { background: var(--surface); border-color: var(--border); box-shadow: inset 3px 0 0 var(--lav), 0 8px 20px -14px #1c193040; }
+
+/* Panels on the canvas: rounded, borderless, gently tinted. */
+.workspace .share-panel, .workspace .speak-panel, .workspace .private-panel, .workspace .access-panel,
+.workspace .event-stats, .workspace .empty-workspace {
+  border-radius: var(--r-lg); border: 1px solid var(--border); background: var(--surface);
+}
+.workspace .share-panel { background: linear-gradient(135deg, #f6f3ff 0%, #fdf2ef 100%); border-color: #ece6ff; }
+.workspace .speak-panel { background: linear-gradient(135deg, #effaf7 0%, #f6f3ff 100%); border-color: #dcf1ec; }
+.workspace .qr-block { border-radius: var(--r-md); box-shadow: 0 10px 30px -18px #1c193055; }
+.workspace .copy-field, .workspace input, .workspace select, .workspace textarea { border-radius: var(--r-sm); }
+.workspace .copy-field { background: var(--canvas); border-color: var(--border); }
+.workspace .event-state.is-live, .workspace .event-state.live { color: var(--live); }
+
+/* Dialogs and toasts. */
+.workspace dialog { border-radius: var(--r-lg); border: 0; box-shadow: 0 40px 100px -30px #1c193080; }
+.workspace dialog::backdrop { background: #1c193040; backdrop-filter: blur(4px); }
+.workspace .toast { border-radius: 999px; background: var(--text); }
+
+/* Sign-in page in the same skin. */
+.workspace .signin-form-panel { border-radius: var(--r-lg); border: 0; box-shadow: 0 30px 80px -40px #1c193066; }
+.workspace .signin-form-panel .button { background: var(--glow); }
+
+@media (max-width: 899px) {
+  .workspace .app-header { background: var(--bg); border: 0; }
+  .admin-workspace .workspace-main { background: var(--canvas); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+}
+
+/* The page behind the canvas (app.css paints html dark in some themes). */
+html:has(body.workspace) { background: #f4f1ec; }

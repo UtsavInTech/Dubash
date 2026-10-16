@@ -1,0 +1,104 @@
+# From the repository root: docker compose -f deploy/compose.phase4.yml up --build
+# Defaults to -fake: no provider requests. Add compose.live.yml for a live event.
+x-app: &app
+  build:
+    context: ..
+  command: ["-fake"]
+  restart: unless-stopped
+  stop_grace_period: 12s
+  environment: &environment
+    ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+    # The same on every server: speaker links and reader passes signed by
+    # one are valid on all.
+    TOKEN_SECRET: ${TOKEN_SECRET:-}
+    TRUST_PROXY: "on" # behind nginx, which sets X-Forwarded-For
+    DATABASE_URL: postgres://dubash:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/dubash?sslmode=disable
+    REDIS_URL: redis://redis:6379/0
+    PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+    CLUSTER_NAMESPACE: ${CLUSTER_NAMESPACE:-dubash}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks: [backend]
+
+services:
+  app-a:
+    <<: *app
+    environment:
+      <<: *environment
+      NODE_URL: http://app-a:8080
+      ROOM_IDS: main-hall
+  app-b:
+    <<: *app
+    environment:
+      <<: *environment
+      NODE_URL: http://app-b:8080
+      ROOM_IDS: hall-b
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dubash
+      POSTGRES_DB: dubash
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U dubash -d dubash"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks: [backend]
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, "yes"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks: [backend]
+    restart: unless-stopped
+  gateway:
+    image: nginx:stable-alpine
+    ports: ["8080:8080"]
+    volumes: ["./nginx.conf:/etc/nginx/nginx.conf:ro"]
+    depends_on: [app-a, app-b]
+    networks: [backend]
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: [--config.file=/etc/prometheus/prometheus.yml]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    secrets: [admin_token]
+    networks: [backend]
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports: ["127.0.0.1:3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dubash.json:/var/lib/grafana/dashboards/dubash.json:ro
+      - grafana-data:/var/lib/grafana
+    networks: [backend]
+    restart: unless-stopped
+
+networks:
+  backend:
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+secrets:
+  admin_token:
+    environment: ADMIN_TOKEN

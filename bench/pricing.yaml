@@ -1,0 +1,12 @@
+# Provider rates in Indian rupees, used for cost estimates and the report.
+# A provider missing here is reported with an unknown ("?") cost, never as
+# free. Re-check before quoting a price to a customer.
+checked: "2026-10-16 from docs.sarvam.ai/api-reference-docs/pricing (Sarvam). Others not yet verified."
+asr:
+  scripted: {per_hour: 0}   # offline fake
+  sarvam:
+    per_hour: 30      # Speech to Text, billed per second, rounded up per request
+translate:
+  fake: {per_10k_chars: 0}  # offline fake
+  sarvam:
+    per_10k_chars: 20 # Sarvam Translate V1 and Mayura V1

@@ -1,0 +1,8 @@
+lang: kn
+vocabulary: demo-india
+tags: [synthetic, negation]
+reference: >-
+  ಎಲ್ಲರಿಗೂ ನಮಸ್ಕಾರ. ಈ ಕಾರ್ಯಕ್ರಮ ಬೆಂಗಳೂರಿನಲ್ಲಿ ನಡೆಯುತ್ತಿದೆ. ಪ್ರವೇಶ ಉಚಿತವಲ್ಲ.
+notes: >-
+  macOS voice Soumya (kn_IN). "ಉಚಿತವಲ್ಲ" (not free) negates with a suffix,
+  which the negation word list cannot see: a known limit of that metric.

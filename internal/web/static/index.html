@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Live captions and translation for events in India. The speaker talks once; everyone scans a QR code and reads in their own language.">
+  <meta name="theme-color" content="#fbf8f4">
+  <title>Dubash · Every word, in every language in the room</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/fonts/inclusive-sans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/css/site.css">
+</head>
+<body class="site">
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-nav" id="top">
+    <a class="site-brand" href="/" aria-label="Dubash home">
+      <span class="site-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 19c3.5-10 7.5-10 11 0s7.5 10 11 0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span>
+      dubash
+    </a>
+    <nav aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#languages">Languages</a>
+      <a href="/events">Join an event</a>
+    </nav>
+    <a class="pill pill-dark" href="/login">Sign in</a>
+  </header>
+
+  <main id="main">
+    <!-- Hero: the speaker on stage, captions flowing to every phone. -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-art" role="img" aria-label="A speaker on stage; her words flow as captions in English, Hindi and more to the phones of the audience."></div>
+      <div class="hero-copy">
+        <p class="kicker"><span class="dot"></span> Live captions &amp; translation</p>
+        <h1 id="hero-title">One voice.<br><em>Every language</em><br>in the room.</h1>
+        <p class="lede">The speaker talks once. Everyone scans a QR code and reads along live on their own phone, in Hindi, Tamil, Telugu, Kannada, English and more.</p>
+        <div class="hero-actions">
+          <a class="pill pill-glow" href="/login">Host an event</a>
+          <a class="pill pill-ghost" href="#demo">See it live <span aria-hidden="true">↓</span></a>
+        </div>
+        <ul class="hero-facts" aria-label="At a glance">
+          <li><strong>&lt;1 s</strong><span>caption delay</span></li>
+          <li><strong>11</strong><span>Indian languages</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Live preview: sample captions, no microphone. -->
+    <section class="demo" id="demo" aria-labelledby="demo-title">
+      <div class="demo-copy">
+        <p class="kicker">Try it</p>
+        <h2 id="demo-title">The same sentence,<br>in the reader’s language.</h2>
+        <p>Pick a language. This is what someone in the third row sees on their phone while the speaker talks in Hindi.</p>
+      </div>
+      <div class="phone" aria-live="polite">
+        <div class="phone-notch" aria-hidden="true"></div>
+        <div class="phone-head">
+          <span class="cc" aria-hidden="true">CC</span>
+          <div><strong>Community gathering</strong><span class="live"><span class="dot"></span> Live</span></div>
+        </div>
+        <div id="demo-languages" class="lang-pills" role="group" aria-label="Reading language">
+          <button type="button" data-lang="en" aria-pressed="true">English</button>
+          <button type="button" data-lang="hi" aria-pressed="false" lang="hi">हिन्दी</button>
+          <button type="button" data-lang="te" aria-pressed="false" lang="te">తెలుగు</button>
+          <button type="button" data-lang="kn" aria-pressed="false" lang="kn">ಕನ್ನಡ</button>
+          <button type="button" data-lang="ta" aria-pressed="false" lang="ta">தமிழ்</button>
+        </div>
+        <div class="phone-lines">
+          <p class="past">Welcome, everyone.</p>
+          <p class="sample-original" lang="hi">आज हम सब एक साथ हैं।</p>
+          <p id="demo-caption" class="now" lang="en">Today, we are all here together.</p>
+        </div>
+        <div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+    </section>
+
+    <!-- Features. -->
+    <section class="features" id="features" aria-labelledby="features-title">
+      <header class="section-head">
+        <p class="kicker">Why Dubash</p>
+        <h2 id="features-title">Made for real rooms,<br>real accents, real names.</h2>
+      </header>
+      <div class="feature-grid">
+        <article class="card">
+          <span class="icon icon-lav" aria-hidden="true">CC</span>
+          <h3>Captions as they speak</h3>
+          <p>Lines appear at natural pauses, never cut mid-phrase, so readers follow the thought, not fragments.</p>
+        </article>
+        <article class="card">
+          <span class="icon icon-teal" aria-hidden="true">अ</span>
+          <h3>Their dialect, kept</h3>
+          <p>Hinglish stays Hinglish. The speaker’s own words are never “corrected” into textbook language.</p>
+        </article>
+        <article class="card">
+          <span class="icon icon-coral" aria-hidden="true">Aa</span>
+          <h3>Names spelled right</h3>
+          <p>A dictation bank for speakers, places, rituals and brands. Load the script, and it knows what to expect.</p>
+        </article>
+        <article class="card">
+          <span class="icon icon-lav" aria-hidden="true">QR</span>
+          <h3>Scan and read</h3>
+          <p>No app, no account. One QR code on a poster or screen; readers pick a language and the history comes too.</p>
+        </article>
+        <article class="card">
+          <span class="icon icon-teal" aria-hidden="true">₹</span>
+          <h3>Pay for what’s read</h3>
+          <p>Each language is translated only while someone reads it. Listening costs about ₹30 an hour, each language about ₹4 more.</p>
+        </article>
+        <article class="card">
+          <span class="icon icon-coral" aria-hidden="true">PIN</span>
+          <h3>Private when needed</h3>
+          <p>Audience PINs, time-limited speaker links, and transcripts that delete themselves on schedule.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Scale band: the big stage. -->
+    <section class="band" aria-labelledby="band-title">
+      <div class="band-art" role="img" aria-label="A speaker in a large arena; captions in English, Spanish and Hindi reach phones in the crowd."></div>
+      <div class="band-copy">
+        <p class="kicker kicker-light">From a hall to an arena</p>
+        <h2 id="band-title">Fifty listeners<br>or five thousand.</h2>
+        <p>Every phone gets the same caption at the same moment. Readers who join late, or lose signal, pick up exactly where they left off.</p>
+      </div>
+    </section>
+
+    <!-- How it works. -->
+    <section class="how" id="how" aria-labelledby="how-title">
+      <header class="section-head">
+        <p class="kicker">How it works</p>
+        <h2 id="how-title">Three steps.<br>About five minutes.</h2>
+      </header>
+      <ol class="steps">
+        <li class="card">
+          <span class="step-n">1</span>
+          <h3>Create your event</h3>
+          <p>Name it, choose the spoken language and the languages your audience reads.</p>
+        </li>
+        <li class="card">
+          <span class="step-n">2</span>
+          <h3>Share one QR code</h3>
+          <p>Print the poster or show it on screen. Send the speaker a private link to their console.</p>
+        </li>
+        <li class="card">
+          <span class="step-n">3</span>
+          <h3>Press the mic</h3>
+          <p>The speaker talks; captions and translations flow to every phone in the room.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Languages: the Indian stage. -->
+    <section class="india" id="languages" aria-labelledby="india-title">
+      <div class="india-art" role="img" aria-label="A speaker at an outdoor event in India; her words reach the audience in Hindi, Tamil and English."></div>
+      <div class="india-copy">
+        <p class="kicker">Built for India</p>
+        <h2 id="india-title">Spoken in Hindi.<br>Read in Tamil.<br>Understood by all.</h2>
+        <p>Speech recognition and translation tuned for Indian languages, with each script set in a typeface made for it.</p>
+        <ul class="lang-cloud" aria-label="Supported languages">
+          <li lang="hi">हिन्दी</li><li lang="ta">தமிழ்</li><li lang="te">తెలుగు</li><li lang="kn">ಕನ್ನಡ</li>
+          <li lang="ml">മലയാളം</li><li lang="bn">বাংলা</li><li lang="mr">मराठी</li><li lang="gu">ગુજરાતી</li>
+          <li lang="pa">ਪੰਜਾਬੀ</li><li lang="or">ଓଡ଼ିଆ</li><li>English</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Questions. -->
+    <section class="faq" aria-labelledby="faq-title">
+      <h2 id="faq-title">Good to know</h2>
+      <div>
+        <details><summary>Does the audience need an app or an account?</summary><p>No. They scan the QR code or open the link and choose a language. If the organiser set a PIN, the page asks for it once.</p></details>
+        <details><summary>Which microphone can the speaker use?</summary><p>Any: the laptop’s own, a wireless mic through a mixer, or an audio interface. The console runs in the browser.</p></details>
+        <details><summary>How accurate is it?</summary><p>Very good on clear speech, and better with a dictation bank and script. Captions are automatic, so the speaker console lets you fix a word live; readers see the fix at once.</p></details>
+        <details><summary>What does it cost?</summary><p>Roughly ₹30 an hour for listening, plus about ₹4 an hour for each language people are reading.</p></details>
+      </div>
+    </section>
+
+    <!-- Closing call. -->
+    <section class="cta" aria-labelledby="cta-title">
+      <h2 id="cta-title">Make room for<br><em>every language.</em></h2>
+      <a class="pill pill-glow" href="/login">Host your first event</a>
+      <a class="cta-reader" href="/events">Have an event link? Join it here →</a>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <a class="site-brand" href="/">dubash</a>
+    <span>Speak once. Be understood by everyone.</span>
+    <a href="/events">Join an event</a>
+    <a href="/login">Organiser sign in</a>
+  </footer>
+  <script type="module" src="/static/js/welcome.js"></script>
+</body>
+</html>

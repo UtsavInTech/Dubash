@@ -1,0 +1,706 @@
+// Package web serves the audience, operator and admin pages and the
+// streaming endpoints behind them.
+package web
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"log/slog"
+	"net/http"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/coder/websocket"
+	"rsc.io/qr"
+
+	"github.com/UtsavInTech/dubash/internal/bank"
+	"github.com/UtsavInTech/dubash/internal/caption"
+	"github.com/UtsavInTech/dubash/internal/config"
+	"github.com/UtsavInTech/dubash/internal/export"
+	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/store"
+	"github.com/UtsavInTech/dubash/internal/translate"
+)
+
+//go:embed static
+var embedded embed.FS
+
+// Server routes requests to rooms.
+type Server struct {
+	roomsMu     sync.RWMutex
+	createMu    sync.Mutex
+	CreateEvent EventFactory
+	rooms       map[string]*room.Room
+	order       []*room.Room
+	store       *store.Store
+	token       string
+	log         *slog.Logger
+	static      fs.FS
+
+	// PublicURL is the audience-facing base URL (https://subs.example.org)
+	// encoded in QR codes. Empty means the URL the request came in on.
+	PublicURL     string
+	Demo          bool
+	TemporaryData bool
+
+	// Bank is the Dictation Bank store; nil disables its pages and API.
+	Bank bank.Store
+
+	// Prices and Meter estimate each room's cost for the panel and the
+	// metrics. Meter counts a chat translator's tokens; without one,
+	// translation is priced per character.
+	Prices          Prices
+	Meter           *translate.Meter
+	CorrectionMeter *translate.Meter
+
+	// Catalog is every event of the deployment, for QR join codes: with
+	// several servers this one runs only some of them (nil: its own).
+	Catalog []config.Room
+
+	// TrustProxy takes the client address from X-Forwarded-For (set it
+	// only behind a proxy that overwrites that header).
+	TrustProxy bool
+	// MaxViewers caps caption connections in all, MaxViewersPerIP per
+	// client address (a venue's Wi-Fi often shares one address: keep it
+	// generous).
+	MaxViewers, MaxViewersPerIP int
+
+	access     *access
+	google     *googleSignIn // nil: Sign in with Google is off
+	viewersMu  sync.Mutex
+	viewers    int
+	viewersIP  map[string]int
+	rehearsing sync.Map // room → struct{}: one paid rehearsal at a time
+	liveMu     sync.Mutex
+	live       map[string]func() // room → its console's session, when a speaker link opened it
+
+	// drainGrace is how long a room's pipeline may keep finishing after
+	// its operator disconnects before it is cancelled.
+	drainGrace time.Duration
+
+	// sessions counts audio sessions whose pipeline is still running.
+	// http.Server.Shutdown does not wait for them: they are hijacked.
+	sessions sync.WaitGroup
+}
+
+// New serves rooms in the given order. An empty token disables auth.
+func New(rooms []*room.Room, st *store.Store, token string, log *slog.Logger) *Server {
+	static, err := fs.Sub(embedded, "static")
+	if err != nil {
+		panic(err) // embedded tree is fixed at build time
+	}
+	s := &Server{
+		rooms: map[string]*room.Room{}, order: rooms, store: st, token: token, log: log, static: static,
+		access: newAccess(token, "", ""), viewersIP: map[string]int{}, live: map[string]func(){}, MaxViewers: 20000, MaxViewersPerIP: 300,
+	}
+	for _, rm := range rooms {
+		s.rooms[rm.Config().ID] = rm
+	}
+	return s
+}
+
+// UseState keeps revocations of publisher tokens in dir, and signs
+// tokens with secret (TOKEN_SECRET; the admin token when empty), so that
+// rotating the admin token need not invalidate speakers' tokens.
+func (s *Server) UseState(dir, secret string) {
+	s.access = newAccess(s.token, secret, dir)
+}
+
+// Handler returns the HTTP routes.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	s.accessRoutes(mux)
+	s.sessionRoutes(mux)
+	s.googleRoutes(mux)
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(s.static)))
+	mux.HandleFunc("GET /{$}", s.page("index.html"))
+	mux.HandleFunc("GET /login", s.page("login.html"))
+	mux.HandleFunc("GET /events", s.page("discover.html"))
+	mux.HandleFunc("GET /r/{room}", s.page("viewer.html"))
+	mux.HandleFunc("GET /operator/{room}", s.page("operator.html"))
+	mux.HandleFunc("GET /admin", s.page("admin.html"))
+	mux.HandleFunc("GET /posters", s.page("posters.html"))
+	mux.HandleFunc("GET /sw.js", s.serviceWorker)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "ok") })
+	mux.HandleFunc("GET /api/rooms", s.listRooms)
+	mux.HandleFunc("GET /api/rooms/{room}/talks", s.readers(s.listTalks))
+	mux.HandleFunc("GET /api/site", s.site)
+	mux.HandleFunc("GET /qr/{room}", s.qr)
+	mux.HandleFunc("GET /api/admin/status", s.anyStaff(s.adminStatus))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/talks", s.auth(s.newTalk))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/pause", s.publisher(s.control(func(rm *room.Room) { rm.Pause() })))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/resume", s.publisher(s.control(func(rm *room.Room) { rm.Resume() })))
+	mux.HandleFunc("POST /api/admin/rooms/{room}/end", s.auth(s.control(func(rm *room.Room) { rm.End() })))
+	mux.HandleFunc("GET /metrics", s.auth(s.metrics))
+	mux.HandleFunc("GET /events/{room}", s.events)
+	mux.HandleFunc("GET /ingest/{room}", s.publisher(s.ingest))
+	mux.HandleFunc("GET /export/{room}/{format}", s.export)
+	mux.Handle("GET /samples/", http.StripPrefix("/samples/", http.FileServer(http.Dir("samples"))))
+	s.manageRoutes(mux)
+	s.bankRoutes(mux)
+	return s.secure(mux)
+}
+
+// page serves one of the embedded HTML pages.
+func (s *Server) page(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, err := fs.ReadFile(s.static, name)
+		if err != nil {
+			http.Error(w, "page missing", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(data)
+	}
+}
+
+// serviceWorker serves sw.js from the root, the scope it needs to answer
+// for /r/ pages, uncached so a new version reaches OBS on its next load.
+func (s *Server) serviceWorker(w http.ResponseWriter, r *http.Request) {
+	data, err := fs.ReadFile(s.static, "sw.js")
+	if err != nil {
+		http.Error(w, "service worker missing", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(data)
+}
+
+func (s *Server) room(w http.ResponseWriter, r *http.Request) (*room.Room, bool) {
+	rm, ok := s.findRoom(r.PathValue("room"))
+	if !ok {
+		http.Error(w, "unknown room", http.StatusNotFound)
+	}
+	return rm, ok
+}
+
+type roomInfo struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Speaker   string   `json:"speaker,omitempty"`
+	Source    string   `json:"source"`
+	Targets   []string `json:"targets"`
+	Live      bool     `json:"live"`
+	Paused    bool     `json:"paused,omitempty"`
+	Ended     bool     `json:"ended,omitempty"`
+	TalkTitle string   `json:"talkTitle,omitempty"`
+}
+
+func (s *Server) listRooms(w http.ResponseWriter, _ *http.Request) {
+	rooms := s.roomSnapshot()
+	out := make([]roomInfo, 0, len(rooms))
+	for _, rm := range rooms {
+		st := rm.Status()
+		out = append(out, roomInfo{ID: st.ID, Title: st.Title, Speaker: st.Speaker, Source: st.Source, Targets: st.Targets,
+			Live: st.Live, Paused: st.Paused, Ended: st.Ended, TalkTitle: st.TalkTitle})
+	}
+	writeJSON(w, out)
+}
+
+func (s *Server) adminStatus(w http.ResponseWriter, r *http.Request) {
+	all := s.statuses()
+	if p := s.who(r); p.role == rolePublisher { // a speaker sees their event only
+		all = slices.DeleteFunc(all, func(st room.Status) bool { return st.ID != p.room })
+	}
+	writeJSON(w, all)
+}
+
+// statuses snapshots every room, with its cost.
+func (s *Server) statuses() []room.Status {
+	rooms := s.roomSnapshot()
+	out := make([]room.Status, 0, len(rooms))
+	for _, rm := range rooms {
+		out = append(out, rm.Status())
+	}
+	costs(out, s.Prices, s.Meter, s.CorrectionMeter)
+	return out
+}
+
+// baseURL is where the audience reaches this server: PublicURL, or the
+// scheme and host of r (honouring a TLS-terminating proxy).
+func (s *Server) baseURL(r *http.Request) string {
+	if s.PublicURL != "" {
+		return strings.TrimRight(s.PublicURL, "/")
+	}
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
+func (s *Server) site(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{"url": s.baseURL(r), "demo": strconv.FormatBool(s.Demo), "temporaryData": strconv.FormatBool(s.TemporaryData)})
+}
+
+// qr serves an SVG QR code that opens the room's captions, for the stage
+// screen and printed posters. An optional lang pins the language;
+// without it the viewer picks the reader's browser language.
+func (s *Server) qr(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.room(w, r)
+	if !ok {
+		return
+	}
+	// With a PIN, the code admits whoever scans it: only those who can
+	// already read the event (the hall screen, staff) get it.
+	if !s.canRead(rm, r) {
+		http.Error(w, "this event asks for a PIN", http.StatusUnauthorized)
+		return
+	}
+	cfg := rm.Config()
+	// The code, not the room id: a join route that the organiser can
+	// revoke (join_revision), never an access token.
+	target := s.baseURL(r) + "/j/" + s.access.joinCode(cfg.ID, cfg.JoinRevision)
+	if lang := r.URL.Query().Get("lang"); slices.Contains(cfg.Languages(), lang) {
+		target += "?lang=" + lang
+	}
+	code, err := qr.Encode(target, qr.M)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if r.URL.Query().Get("format") == "png" {
+		w.Header().Set("Content-Type", "image/png")
+		if r.URL.Query().Get("download") == "1" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-qr.png"`, cfg.ID))
+		}
+	} else {
+		w.Header().Set("Content-Type", "image/svg+xml")
+	}
+	if cfg.AudiencePIN != "" {
+		w.Header().Set("Cache-Control", "private, no-store")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+	}
+	if r.URL.Query().Get("format") == "png" {
+		code.Scale = 16
+		w.Write(code.PNG())
+	} else {
+		io.WriteString(w, qrSVG(code))
+	}
+}
+
+// qrSVG draws code as one path, one horizontal run of dark modules per
+// subpath, inside the 4-module quiet zone scanners need.
+func qrSVG(code *qr.Code) string {
+	const quiet = 4
+	n := code.Size + 2*quiet
+	var b strings.Builder
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" shape-rendering="crispEdges">`, n, n)
+	fmt.Fprintf(&b, `<rect width="%d" height="%d" fill="#fff"/><path fill="#000" d="`, n, n)
+	for y := range code.Size {
+		for x := 0; x < code.Size; {
+			if !code.Black(x, y) {
+				x++
+				continue
+			}
+			run := 0
+			for x+run < code.Size && code.Black(x+run, y) {
+				run++
+			}
+			fmt.Fprintf(&b, "M%d %dh%dv1h-%dz", x+quiet, y+quiet, run, run)
+			x += run
+		}
+	}
+	b.WriteString(`"/></svg>`)
+	return b.String()
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}
+
+// events streams a room's captions with Server-Sent Events. The lang
+// parameter is the language the viewer reads: it receives the committed
+// source lines, their translations into lang (which starts translating
+// lang if nobody else reads it), and the live line. Committed messages
+// carry SSE ids, so a reconnecting browser (which sends Last-Event-ID on
+// its own) receives exactly what it missed.
+func (s *Server) events(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.room(w, r)
+	if !ok {
+		return
+	}
+	lang := r.URL.Query().Get("lang")
+	if !slices.Contains(rm.Config().Languages(), lang) {
+		lang = ""
+	}
+	if !s.canRead(rm, r) {
+		http.Error(w, "this event asks for a PIN", http.StatusUnauthorized)
+		return
+	}
+	release, ok := s.viewerSlot(clientIP(r, s.TrustProxy))
+	if !ok {
+		// EventSource retries on its own; Retry-After is for other clients.
+		retryAfter(w, 30, "too many caption connections; retrying shortly")
+		return
+	}
+	defer release()
+	lastID := r.Header.Get("Last-Event-ID")
+	if lastID == "" {
+		lastID = r.URL.Query().Get("after")
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+
+	hub := rm.Hub()
+	msgs, replay, cancel := hub.Subscribe(64, lang, lastID)
+	defer cancel()
+	if lang != "" && lastID == "" {
+		// A reader opening a language gets the history in it.
+		rm.Backfill(lang)
+	}
+	writeEvent(w, "status", rm.StatusEvent())
+	for _, m := range replay {
+		writeMsg(w, m, hub.Instance())
+	}
+	// Marks the end of the replay, so an overlay can show only new lines.
+	writeEvent(w, "caught-up", struct{}{})
+	flusher.Flush()
+
+	ping := time.NewTicker(15 * time.Second)
+	defer ping.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case m, ok := <-msgs:
+			if !ok {
+				return // dropped for falling behind; the browser reconnects
+			}
+			if writeMsg(w, m, hub.Instance()) != nil {
+				return
+			}
+			flusher.Flush()
+		case <-ping.C:
+			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+// writeMsg writes a hub message, with its id when it has one.
+func writeMsg(w io.Writer, m room.Msg, instance string) error {
+	if id := m.ID(instance); id != "" {
+		if _, err := fmt.Fprintf(w, "id: %s\n", id); err != nil {
+			return err
+		}
+	}
+	return writeEvent(w, m.Event, m.Data)
+}
+
+// control runs an action on a room from the panel or the operator console
+// and answers with the room's status.
+func (s *Server) control(action func(*room.Room)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rm, ok := s.room(w, r)
+		if !ok {
+			return
+		}
+		action(rm)
+		s.log.Info("room control", "room", rm.Config().ID, "action", r.URL.Path)
+		writeJSON(w, rm.Status())
+	}
+}
+
+func writeEvent(w io.Writer, event string, data any) error {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
+	return err
+}
+
+// StatusEventEnded closes an operator's socket when the event was ended
+// from the panel: clients must not reconnect on their own.
+const StatusEventEnded websocket.StatusCode = 4001
+
+// StatusRevoked closes a console whose speaker link was revoked.
+const StatusRevoked websocket.StatusCode = 4003
+
+var errRevoked = errors.New("speaker link revoked")
+
+// defaultDrainGrace covers the ASR engine's own drain after the audio
+// ends; pipelines still running after it are cancelled.
+const defaultDrainGrace = 15 * time.Second
+
+// maxCloseReason is the most a WebSocket close reason may carry (a control
+// frame holds 125 bytes, two of them for the status code).
+const maxCloseReason = 123
+
+// maxTalkTitle bounds a talk title, in bytes.
+const maxTalkTitle = 200
+
+// Wait blocks until every audio session has ended and its last captions
+// are stored, or until ctx is done. Call it after http.Server.Shutdown,
+// which does not wait for WebSocket connections.
+func (s *Server) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.sessions.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// ingest receives an operator's PCM audio over a WebSocket. The optional
+// lang query parameter is the language spoken on stage; without it the room
+// keeps the language of its last transmission. The optional talk parameter
+// titles the talk (see room.Transmission).
+//
+// The socket is read by its own goroutine that never blocks on the
+// pipeline: when the audio buffer is full, chunks are dropped. That keeps
+// the operator's disconnect observable even if the pipeline stops
+// consuming, so a stuck engine can never keep the room live forever.
+func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.room(w, r)
+	if !ok {
+		return
+	}
+	lang := r.URL.Query().Get("lang")
+	if lang != "" && !slices.Contains(rm.Config().Languages(), lang) {
+		http.Error(w, room.ErrLanguage.Error(), http.StatusBadRequest)
+		return
+	}
+	talk := strings.TrimSpace(r.URL.Query().Get("talk"))
+	if len(talk) > maxTalkTitle {
+		talk = strings.ToValidUTF8(talk[:maxTalkTitle], "")
+	}
+	if rm.Status().Live {
+		http.Error(w, room.ErrBusy.Error(), http.StatusConflict)
+		return
+	}
+	// Counted before the connection is hijacked, so that once Shutdown
+	// has returned no session can start behind Wait's back.
+	s.sessions.Add(1)
+	defer s.sessions.Done()
+	// The browser console sends its token as a subprotocol; answer with
+	// ours so the browser accepts the connection.
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{wsProto}})
+	if err != nil {
+		return // Accept already wrote the HTTP error
+	}
+	defer c.CloseNow()
+	c.SetReadLimit(1 << 20)
+	// A hijacked connection's request context is not cancelled when the
+	// client goes away, so the handler cancels the pipeline itself.
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	// Revoking the speaker link stops the pipeline (not the socket's
+	// reads), and the console is told why in the close code.
+	runCtx, stopRun := context.WithCancelCause(ctx)
+	defer stopRun(nil)
+	id := rm.Config().ID
+	s.log.Info("operator connected", "room", id)
+	if s.who(r).role == rolePublisher { // revoking the speaker links cuts it off
+		s.liveMu.Lock()
+		s.live[id] = func() { stopRun(errRevoked) }
+		s.liveMu.Unlock()
+		defer func() {
+			s.liveMu.Lock()
+			delete(s.live, id)
+			s.liveMu.Unlock()
+		}()
+	}
+
+	audio := make(chan []byte, 50)
+	done := make(chan error, 1)
+	go func() { done <- rm.Run(runCtx, room.Transmission{Lang: lang, Talk: talk}, audio) }()
+
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		defer close(audio)
+		dropped := 0
+		defer func() {
+			if dropped > 0 {
+				s.log.Warn("dropped operator audio: pipeline not keeping up", "room", id, "chunks", dropped)
+			}
+		}()
+		for {
+			typ, data, err := c.Read(ctx)
+			if err != nil {
+				return
+			}
+			if typ != websocket.MessageBinary {
+				continue
+			}
+			select {
+			case audio <- data:
+			default:
+				dropped++
+			}
+		}
+	}()
+
+	var runErr error
+	select {
+	case runErr = <-done: // the pipeline ended on its own (busy, fatal error)
+	case <-readDone: // the operator left: let the pipeline finish, briefly
+		grace := s.drainGrace
+		if grace <= 0 {
+			grace = defaultDrainGrace
+		}
+		t := time.NewTimer(grace)
+		select {
+		case runErr = <-done:
+		case <-t.C:
+			s.log.Warn("pipeline did not finish after the operator left; cancelling", "room", id)
+			cancel()
+			runErr = <-done
+		}
+		t.Stop()
+	}
+	s.log.Info("operator disconnected", "room", id)
+	switch {
+	case errors.Is(runErr, room.ErrBusy):
+		c.Close(websocket.StatusPolicyViolation, "room busy")
+	case errors.Is(runErr, room.ErrEnded):
+		c.Close(StatusEventEnded, "event ended")
+	case errors.Is(context.Cause(runCtx), errRevoked):
+		c.Close(StatusRevoked, "speaker link revoked")
+	case runErr != nil && !errors.Is(runErr, context.Canceled):
+		s.log.Error("room session failed", "room", id, "err", runErr)
+		c.Close(websocket.StatusInternalError, closeReason(runErr))
+	default:
+		c.Close(websocket.StatusNormalClosure, "")
+	}
+	c.CloseNow()
+	cancel()
+	<-readDone
+}
+
+// closeReason tells the operator why transcription failed: the innermost
+// cause of err, without URLs (they are long and may carry credentials),
+// trimmed to fit a close frame without splitting a rune.
+func closeReason(err error) string {
+	for u := errors.Unwrap(err); u != nil; u = errors.Unwrap(err) {
+		err = u
+	}
+	words := strings.Fields(err.Error())
+	words = slices.DeleteFunc(words, func(w string) bool { return strings.Contains(w, "://") })
+	msg := "transcripción: " + strings.Join(words, " ")
+	if len(msg) <= maxCloseReason {
+		return msg
+	}
+	msg = msg[:maxCloseReason]
+	for !utf8.ValidString(msg) {
+		msg = msg[:len(msg)-1]
+	}
+	return msg
+}
+
+func (s *Server) export(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.room(w, r)
+	if !ok {
+		return
+	}
+	if !s.canExport(rm, r) {
+		http.Error(w, "the transcript of this event cannot be downloaded here", http.StatusForbidden)
+		return
+	}
+	cfg := rm.Config()
+	lang := r.URL.Query().Get("lang")
+	if lang == "" {
+		lang = cfg.Source
+	}
+	if !slices.Contains(cfg.Languages(), lang) {
+		http.Error(w, "unknown language for this room", http.StatusBadRequest)
+		return
+	}
+	render, contentType := map[string]func([]caption.Segment, string) string{
+		"vtt": export.VTT, "srt": export.SRT, "txt": export.TXT,
+	}, map[string]string{
+		"vtt": "text/vtt; charset=utf-8", "srt": "application/x-subrip; charset=utf-8", "txt": "text/plain; charset=utf-8",
+	}
+	format := r.PathValue("format")
+	fn, ok := render[format]
+	if !ok {
+		http.Error(w, "unknown format", http.StatusNotFound)
+		return
+	}
+	segs, _, err := s.store.Load(cfg.ID)
+	if err != nil {
+		http.Error(w, "cannot read transcript", http.StatusInternalServerError)
+		return
+	}
+	name := cfg.ID
+	if v := r.URL.Query().Get("talk"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			http.Error(w, "talk must be a number", http.StatusBadRequest)
+			return
+		}
+		// A talk that has begun but has no lines yet exports empty.
+		if segs = export.Select(segs, n); segs == nil && (n < 1 || n > rm.Status().Talk) {
+			http.Error(w, "no such talk", http.StatusNotFound)
+			return
+		}
+		name = fmt.Sprintf("%s-talk%d", cfg.ID, n)
+	}
+	w.Header().Set("Content-Type", contentType[format])
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-%s.%s"`, name, lang, format))
+	io.WriteString(w, fn(segs, lang))
+}
+
+// listTalks lists the talks of a room's transcript, oldest first.
+func (s *Server) listTalks(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.room(w, r)
+	if !ok {
+		return
+	}
+	segs, _, err := s.store.Load(rm.Config().ID)
+	if err != nil {
+		http.Error(w, "cannot read transcript", http.StatusInternalServerError)
+		return
+	}
+	talks := export.Talks(segs)
+	if talks == nil {
+		talks = []export.Talk{}
+	}
+	writeJSON(w, talks)
+}
+
+// newTalk starts a new talk in a room, titled by the title form value,
+// so a room fed without interruption (dubash-ingest) is exported talk
+// by talk.
+func (s *Server) newTalk(w http.ResponseWriter, r *http.Request) {
+	rm, ok := s.room(w, r)
+	if !ok {
+		return
+	}
+	title := strings.TrimSpace(r.FormValue("title"))
+	if len(title) > maxTalkTitle {
+		http.Error(w, "title too long", http.StatusBadRequest)
+		return
+	}
+	n := rm.NewTalk(title)
+	s.log.Info("new talk", "room", rm.Config().ID, "talk", n, "title", title)
+	writeJSON(w, map[string]any{"talk": n, "title": title})
+}

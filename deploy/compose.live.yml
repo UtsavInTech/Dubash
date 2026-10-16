@@ -1,0 +1,25 @@
+# Explicit opt-in to paid providers. Never use this overlay for offline tests.
+x-live: &live
+  command: []
+  environment: &providers
+    SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ASR_PROVIDER: ${ASR_PROVIDER:-sarvam}
+    TRANSLATE_PROVIDER: ${TRANSLATE_PROVIDER:-sarvam}
+    ASR_URL: ${ASR_URL:-}
+    ASR_MODEL: ${ASR_MODEL:-}
+    ASR_API_KEY: ${ASR_API_KEY:-}
+    TRANSLATE_URL: ${TRANSLATE_URL:-}
+    TRANSLATE_MODEL: ${TRANSLATE_MODEL:-}
+    TRANSLATE_API_KEY: ${TRANSLATE_API_KEY:-}
+    ASR_BACKUP_URL: ${ASR_BACKUP_URL:?configure an independent Whisper-compatible backup}
+    ASR_BACKUP_MODEL: ${ASR_BACKUP_MODEL:-}
+    ASR_BACKUP_API_KEY: ${ASR_BACKUP_API_KEY:-}
+    TRANSLATE_BACKUP_URL: ${TRANSLATE_BACKUP_URL:?configure an independent chat-completions backup}
+    TRANSLATE_BACKUP_MODEL: ${TRANSLATE_BACKUP_MODEL:-}
+    TRANSLATE_BACKUP_API_KEY: ${TRANSLATE_BACKUP_API_KEY:-}
+services:
+  app-a:
+    <<: *live
+  app-b:
+    <<: *live

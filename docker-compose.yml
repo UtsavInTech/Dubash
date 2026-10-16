@@ -1,0 +1,28 @@
+services:
+  dubash:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+      PUBLIC_URL: ${PUBLIC_URL:-}   # optional: audience URL for QR codes
+      # Gemini (default). Not needed when both ASR_URL and TRANSLATE_URL are set.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Optional OpenAI-compatible servers, e.g. fully local:
+      #   ASR_URL=http://host.docker.internal:8000/v1        (whisper.cpp)
+      #   TRANSLATE_URL=http://host.docker.internal:11434/v1 (Ollama + Gemma)
+      ASR_URL: ${ASR_URL:-}
+      ASR_MODEL: ${ASR_MODEL:-}
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      TRANSLATE_URL: ${TRANSLATE_URL:-}
+      TRANSLATE_MODEL: ${TRANSLATE_MODEL:-}
+      TRANSLATE_API_KEY: ${TRANSLATE_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach model servers on the host
+    volumes:
+      - ./rooms.yaml:/app/rooms.yaml:ro
+      - dubash-data:/data
+    restart: unless-stopped
+
+volumes:
+  dubash-data:
