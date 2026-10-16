@@ -48,7 +48,9 @@ ctx.on('page', (p) => p.on('pageerror', (e) => errors.push(`${p.url()}: ${e.mess
 const op = await ctx.newPage();
 op.on('pageerror', (e) => errors.push(`operator: ${e.message}`));
 await op.goto(`${BASE}/operator/sala-a?token=${TOKEN}`);
+await op.locator('details').filter({ has: op.locator('#talk') }).locator('summary').click();
 await op.fill('#talk', 'El futuro del open source');
+await op.selectOption('#source', 'file');
 await op.click('a[data-sample="en"]');
 await op.click('#start');
 await op.waitForFunction(() => document.getElementById('status').classList.contains('live'), null, { timeout: 10000 });
@@ -176,10 +178,10 @@ check('sala-b (CLI ingest, es) translated to en', (await ov.textContent('#lines 
 // Admin panel.
 const adm = await ctx.newPage();
 await adm.goto(`${BASE}/admin?token=${TOKEN}`);
-await adm.waitForFunction(() => /^2\b/.test(document.querySelector('#sum-live b')?.textContent ?? ''), null, { timeout: 10000 })
+await adm.waitForFunction(() => /^2\b/.test(document.querySelector('#live-count')?.textContent ?? ''), null, { timeout: 10000 })
   .then(() => check('admin: 2 rooms live in parallel', true))
-  .catch(async () => check('admin: 2 rooms live in parallel', false, await adm.textContent('#sum-live b')));
-const viewers = Number(await adm.textContent('#sum-viewers b'));
+  .catch(async () => check('admin: 2 rooms live in parallel', false, await adm.textContent('#live-count')));
+const viewers = Number(await adm.textContent('#viewer-count'));
 check('admin counts viewers', viewers >= 3, String(viewers));
 
 // Talks API and exports.
@@ -335,6 +337,7 @@ const sp = await spk.newPage();
 sp.on('pageerror', (e) => errors.push(`speaker console: ${e.message}`));
 await sp.goto(`${BASE}/operator/hall-hi#token=${minted.token}`);
 check('speaker console drops the token from the address bar', !sp.url().includes(minted.token) && (await sp.inputValue('#token')) === minted.token);
+await sp.selectOption('#source', 'file');
 await sp.click('a[data-sample="en"]');
 await sp.click('#start');
 await sp.waitForFunction(() => document.getElementById('status').classList.contains('live'), null, { timeout: 10000 })
@@ -344,6 +347,58 @@ await sp.waitForFunction(() => document.getElementById('error').textContent.incl
   .then(() => check('revoking cuts the speaker console off, saying why', true))
   .catch(async () => check('revoking cuts the speaker console off, saying why', false, await sp.textContent('#error')));
 await spk.close();
+
+// Landing-page sample interactions do not open microphones or call providers.
+const welcome = await ctx.newPage();
+await welcome.goto(BASE);
+check('first visit explains the product', await welcome.isVisible('.welcome-hero'));
+await welcome.click('#demo-languages [data-lang="te"]');
+check('sample preview changes language', (await welcome.getAttribute('#demo-caption', 'lang')) === 'te');
+const freshLogin = await browser.newContext();
+const signIn = await freshLogin.newPage();
+await signIn.goto(`${BASE}/login`);
+await signIn.fill('#signin-key', TOKEN);
+await signIn.click('#signin-submit');
+await signIn.waitForURL(`${BASE}/admin`);
+check('organiser sign in uses a cookie instead of storing the key', await signIn.evaluate(() => !localStorage.getItem('dubash.token')));
+await signIn.click('#sign-out');
+await signIn.waitForURL(`${BASE}/login`);
+check('sign out returns to the login page', true);
+await freshLogin.close();
+await welcome.close();
+
+// Organiser setup: create an event, distinguish share links, open a microphone-first console.
+const studio = await ctx.newPage();
+await studio.goto(`${BASE}/admin`);
+await studio.click('#create-open');
+await studio.fill('#event-name', 'Frontend flow check');
+await studio.selectOption('#event-source', 'hi');
+await studio.click('#create-submit');
+await studio.waitForFunction(() => document.querySelector('#event-title')?.textContent === 'Frontend flow check');
+await studio.waitForFunction(() => !document.querySelector('#copy-audience')?.disabled);
+const audienceLink = await studio.inputValue('#audience-url');
+check('created event has a token-free audience link', audienceLink.endsWith('/r/frontend-flow-check') && !audienceLink.includes('token'));
+check('speaker console is a separate action', (await studio.getAttribute('#open-console', 'href')) === '/operator/frontend-flow-check');
+await studio.waitForFunction(() => !document.querySelector('#download-qr')?.disabled);
+const qrDownload = studio.waitForEvent('download');
+await studio.click('#download-qr');
+const qrImage = await qrDownload;
+check('QR downloads as a shareable PNG', qrImage.suggestedFilename() === 'frontend-flow-check-qr.png' && !(await qrImage.failure()));
+check('native QR sharing action is available', await studio.isEnabled('#share-qr'));
+
+await studio.click('#make-speaker');
+await studio.waitForSelector('#speaker:not([hidden])');
+check('private speaker link is separately labelled', (await studio.inputValue('#speaker-url')).includes('/operator/frontend-flow-check#token=p1.'));
+await studio.click('#open-console');
+await studio.waitForFunction(() => !document.querySelector('#start')?.disabled);
+check('console defaults to microphone, not file', (await studio.inputValue('#source')) === 'default' && await studio.isHidden('#file-row'));
+await studio.setViewportSize({ width: 390, height: 844 });
+check('speaker console fits a phone', await studio.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+await studio.goto(`${BASE}/admin`);
+await studio.waitForSelector('#event-workspace:not([hidden])');
+check('admin workspace fits a phone', await studio.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+check('created event is listed for the audience', (await (await get('/api/rooms')).json()).some((r) => r.id === 'frontend-flow-check'));
+await studio.close();
 
 // Metrics after traffic.
 const metrics = await (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).text();

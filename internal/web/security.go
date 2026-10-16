@@ -31,6 +31,10 @@ func (s *Server) accessRoutes(mux *http.ServeMux) {
 // a streaming overlay).
 func (s *Server) secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && strings.HasPrefix(r.URL.Path, "/api/admin/") && bearer(r) == "" && s.signedOrganiser(r) && !s.browserOrigin(r) {
+			http.Error(w, "This event action came from another website.", http.StatusForbidden)
+			return
+		}
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
@@ -49,7 +53,7 @@ func (s *Server) secure(next http.Handler) http.Handler {
 }
 
 func staffPage(path string) bool {
-	for _, p := range []string{"/admin", "/bank", "/operator/", "/api/admin/", "/metrics", "/ingest/"} {
+	for _, p := range []string{"/login", "/api/session", "/admin", "/bank", "/operator/", "/api/admin/", "/metrics", "/ingest/"} {
 		if path == p || strings.HasPrefix(path, p) {
 			return true
 		}
@@ -174,7 +178,7 @@ func (s *Server) Retain(ctx context.Context) {
 }
 
 func (s *Server) retainOnce(ctx context.Context, now time.Time) {
-	for _, rm := range s.order {
+	for _, rm := range s.roomSnapshot() {
 		days := rm.Config().RetentionDays
 		if days <= 0 {
 			continue
@@ -218,7 +222,7 @@ func (s *Server) canExport(rm *room.Room, r *http.Request) bool {
 // readers admits those who can read the request's room.
 func (s *Server) readers(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if rm, ok := s.rooms[r.PathValue("room")]; ok && !s.canRead(rm, r) {
+		if rm, ok := s.findRoom(r.PathValue("room")); ok && !s.canRead(rm, r) {
 			http.Error(w, "this event asks for a PIN", http.StatusUnauthorized)
 			return
 		}
@@ -282,9 +286,9 @@ func (s *Server) admit(w http.ResponseWriter, r *http.Request, id string) {
 // no longer works.
 func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 	code := strings.ToLower(r.PathValue("code"))
-	catalog := s.Catalog
+	catalog := s.catalogSnapshot()
 	if catalog == nil {
-		for _, rm := range s.order {
+		for _, rm := range s.roomSnapshot() {
 			catalog = append(catalog, rm.Config())
 		}
 	}

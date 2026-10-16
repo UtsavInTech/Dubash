@@ -7,3 +7,4 @@
 /bench/results/
 # Clips cut from third-party videos (YouTube): audio and transcripts stay local.
 /bench/recordings/yt-*
+/deploy-out/

@@ -200,6 +200,8 @@ function savePrefs() {
 
 function wirePrefs() {
   $('prefs-open').onclick = () => $('prefs').showModal();
+  $('text-smaller').onclick = () => { prefs.size = Math.max(0, prefs.size - 1); savePrefs(); };
+  $('text-larger').onclick = () => { prefs.size = Math.min(3, prefs.size + 1); savePrefs(); };
   for (const b of $('sizes').children) b.onclick = () => { prefs.size = Number(b.dataset.size); savePrefs(); };
   $('prefs').addEventListener('change', (e) => {
     const t = e.target;
@@ -420,6 +422,7 @@ function wireFollow() {
 }
 
 async function main() {
+  fetch('/api/site').then((r) => r.json()).then((s) => { if (s.demo === 'true') { $('deployment-mode').textContent = 'Demo mode: captions are scripted test text, not recognition or translation of the speaker. No paid speech providers are used.'; $('deployment-mode').hidden = false; } }).catch(() => {});
   lang = UI[params.get('lang')] ? params.get('lang') : 'en';
   const rooms = await loadRooms();
   room = rooms.find((r) => r.id === roomId);

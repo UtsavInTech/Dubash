@@ -18,7 +18,7 @@ if (params.has('token')) { // keep the token out of the address bar and history
 $('token').onchange = () => { try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ } refresh(); };
 
 async function api(method, path, body) {
-  const opts = { method, headers: { Authorization: `Bearer ${$('token').value.trim()}` } };
+  const opts = { method, headers: { 'X-Dubash-Token': $('token').value.trim() } };
   if (body instanceof URLSearchParams) opts.body = body;
   else if (body) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
   const res = await fetch(path, opts);
@@ -211,7 +211,7 @@ $('script-form').onsubmit = async (ev) => {
   if (!fd.get('file')?.size) fd.delete('file');
   try {
     const res = await fetch(`/api/admin/events/${$('s-event').value}/scripts`, {
-      method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` }, body: fd,
+      method: 'POST', headers: { 'X-Dubash-Token': $('token').value.trim() }, body: fd,
     });
     if (!res.ok) throw new Error((await res.text()).trim());
     $('script-form').reset();
@@ -234,7 +234,7 @@ $('rehearse-form').onsubmit = async (ev) => {
   $('rehearsal').replaceChildren(el('p', { className: 'hint', textContent: 'Rehearsing… (about twice the recording\'s length)' }));
   try {
     const res = await fetch(`/api/admin/events/${$('r-event').value}/rehearse`, {
-      method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` }, body: new FormData($('rehearse-form')),
+      method: 'POST', headers: { 'X-Dubash-Token': $('token').value.trim() }, body: new FormData($('rehearse-form')),
     });
     if (!res.ok) throw new Error((await res.text()).trim());
     const r = await res.json();

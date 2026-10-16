@@ -1,72 +1,10 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Console · Dubash</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="preload" href="/static/fonts/inclusive-sans.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/css/app.css">
-  <script src="/static/js/prefs.js"></script>
-</head>
-<body data-mode="console">
-  <a class="skip" href="#main">Skip to content</a>
-  <header class="header">
-    <div class="header-inner">
-      <a class="brand" href="/"><svg viewBox="0 0 30 22" aria-hidden="true"><rect x="1" y="1" width="28" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="6" y="10" width="11" height="3" fill="currentColor"/><rect x="19" y="10" width="5" height="3" fill="currentColor"/><rect x="6" y="15" width="18" height="3" fill="currentColor"/></svg>Dubash</a>
-      <span class="header-section">Speaker console</span>
-      <span class="spacer"></span>
-      <span id="status" class="status" role="status">Stopped</span>
-    </div>
-  </header>
-  <main id="main" class="container">
-    <h1 id="title">Event</h1>
-    <div class="console">
-      <section aria-labelledby="source-title">
-        <h2 id="source-title">Audio source</h2>
-        <label class="field"><span>Speaker link token or admin token</span>
-          <input id="token" type="password" autocomplete="off"></label>
-        <label class="field"><span>Language the speaker uses</span>
-          <select id="spoken"></select>
-          <span id="spoken-hint" class="hint"></span></label>
-        <label class="field"><span>Session title (optional)</span>
-          <input id="talk" type="text" autocomplete="off" maxlength="200">
-          <span class="hint">A new title starts a new session: each session's transcript downloads separately.</span></label>
-        <div class="row">
-          <select id="source" aria-label="Audio source"><option value="file">Audio file</option></select>
-          <button id="detect" class="button secondary" type="button">Find microphones</button>
-        </div>
-        <div id="file-row">
-          <div class="row"><input id="file" type="file" accept="audio/*,video/*"></div>
-          <p class="hint">Or try a sample: <span><a href="#" data-sample="en">English</a></span> <span>· <a href="#" data-sample="es">Spanish</a></span></p>
-        </div>
-        <audio id="player" controls hidden></audio>
-        <div class="transport">
-          <button id="start" class="button go" type="button">Go live</button>
-          <button id="pause" class="button secondary" type="button" disabled aria-pressed="false">Pause</button>
-          <button id="stop" class="button secondary" type="button" disabled>Stop</button>
-          <span id="sent" class="hint"></span>
-        </div>
-        <p class="hint" id="level-label">Input level</p>
-        <div class="meter" role="presentation" aria-labelledby="level-label"><div id="level"></div></div>
-        <p id="error" class="error" role="alert"></p>
-        <details class="help">
-          <summary>Send the mixer's feed without a browser</summary>
-          <p>To run an event unattended from the venue mixer or a stream, use <code>dubash-ingest</code> (it uses ffmpeg and reconnects by itself):</p>
-          <pre class="cli" id="cli"></pre>
-        </details>
-      </section>
-      <section aria-labelledby="monitor-title">
-        <h2 id="monitor-title">Live transcript (spoken language)</h2>
-        <p class="hint">Click a line to fix a word: readers see the fix at once.</p>
-        <div id="captions" class="monitor"><div id="lines"></div><p id="interim"></p></div>
-        <p id="fixes" class="hint" aria-live="polite"></p>
-        <p id="audience" class="hint" aria-live="polite"></p>
-        <h2>Links for this event</h2>
-        <ul id="links" class="link-list"></ul>
-      </section>
-    </div>
-  </main>
-  <script type="module" src="/static/js/operator.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Speaker console · Dubash</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><link rel="preload" href="/static/fonts/inclusive-sans.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/workspace.css"></head>
+<body class="workspace speaker-workspace" data-mode="console"><a class="skip" href="#main">Skip to content</a>
+<header class="app-header"><a class="wordmark" href="/"><span class="brand-mark" aria-hidden="true">d<span>:</span></span>dubash<span class="wordmark-note">every word, for everyone.</span></a><nav aria-label="Console navigation"><a id="admin-back" href="/admin">My events</a><a id="audience-open" target="_blank" rel="noopener">Audience view ↗</a></nav></header>
+<p id="deployment-mode" class="deployment-notice" role="status" hidden></p><main id="main" class="speaker-main"><a class="breadcrumb" href="/admin" id="back-events">← Back to events</a><div class="speaker-heading"><div><p class="eyebrow">SPEAKER CONSOLE</p><h1 id="title">Loading your event…</h1><p>Your microphone → live captions → your audience’s language.</p></div><span id="status" class="event-state" role="status">Not live</span></div>
+<div class="speaker-grid"><section class="mic-panel" aria-labelledby="source-title"><h2 id="source-title">You have the microphone.</h2><p>Check your language, then start. Your browser will ask for microphone access.</p><label class="field"><span>You’ll be speaking in</span><select id="spoken" aria-describedby="spoken-hint"></select><span id="spoken-hint" class="hint small-copy"></span></label><label class="field"><span>Microphone</span><select id="source"><option value="default">Default microphone</option><option value="file">Play an audio file instead</option></select></label><button id="detect" class="text-button" type="button">Choose another microphone</button><div id="file-row" hidden><label class="field"><span>Audio or video file</span><input id="file" type="file" accept="audio/*,video/*"></label><p class="hint">Try a sample: <span><a href="#" data-sample="en">English</a></span> <span>· <a href="#" data-sample="es">Spanish</a></span></p></div><audio id="player" controls hidden></audio><div class="transport"><button id="start" class="button primary" type="button" disabled>Start speaking</button><button id="pause" class="button secondary" type="button" disabled aria-pressed="false">Pause</button><button id="stop" class="button secondary" type="button" disabled>Stop speaking</button></div><span id="sent" aria-live="off"></span><p id="level-label" class="eyebrow" style="margin-top:22px;margin-bottom:9px">MICROPHONE LEVEL</p><div class="meter" role="presentation" aria-labelledby="level-label"><div id="level"></div></div><p id="error" class="error" role="alert"></p><p class="microphone-notice">You stay in control. Nothing is streamed until you press “Start speaking”. Pausing stops sending audio.</p><details class="advanced"><summary>Session name & access key</summary><div class="advanced-content"><label class="field"><span>Session title <small>(optional)</small></span><input id="talk" maxlength="200" placeholder="e.g. Opening remarks"><span class="hint small-copy">A new title starts a separate session transcript.</span></label><label class="field"><span>Speaker or admin access key</span><input id="token" type="password" autocomplete="off"><span class="hint small-copy">Already filled in when you arrive from your admin studio or a private speaker link.</span></label></div></details></section>
+<section class="transcript-panel" aria-labelledby="monitor-title"><div class="section-heading"><h2 id="monitor-title">Your words, live.</h2><span class="muted small-copy">Spoken language</span></div><div id="captions" class="monitor"><div id="transcript-empty" class="transcript-empty"><strong>The first word is yours.</strong>Start speaking and your captions will appear here.<br>Your audience will see the translations on their phones.</div><div id="lines" aria-live="polite"></div><p id="interim" aria-hidden="true"></p></div><div class="transcript-footer"><p>Need to fix a word? Select a caption to edit it.</p><p id="fixes" aria-live="polite"></p><p id="audience" aria-live="polite">Your audience can join before you start.</p></div></section></div>
+<section class="speaker-share" aria-labelledby="share-title"><div><h2 id="share-title">Invite your audience.</h2><p>Share this link. They pick their language and follow along.</p></div><div class="copy-field"><input id="audience-url" readonly aria-label="Audience link"><button id="copy-audience" class="button primary" type="button" disabled>Copy link</button></div></section>
+<details class="advanced speaker-tools"><summary>Projector, stream overlay & other audio sources</summary><div class="advanced-content"><ul id="links" class="link-list"></ul><details class="help"><summary>Connect a venue mixer without the browser</summary><p>Use the venue audio feed with dubash-ingest:</p><pre class="cli" id="cli"></pre></details></div></details>
+<footer class="studio-footer"><span>Speak naturally. Let everyone follow.</span><span>Dubash · Speaker console</span></footer></main><div id="toast" class="toast" role="status" hidden></div><script type="module" src="/static/js/operator.js"></script><script type="module" src="/static/js/deployment.js"></script></body></html>

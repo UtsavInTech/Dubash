@@ -63,11 +63,18 @@ func TestCatalogPersistsWithoutYAML(t *testing.T) {
 	if err = Replace(ctx, db, cfg); err != nil {
 		t.Fatal(err)
 	}
+	added := config.Room{ID: "browser-event", Title: "Browser event", Source: "hi", Targets: []string{"en"}, AudiencePIN: "1234", RetentionDays: 30, Exports: "admin"}
+	if err = Add(ctx, db, added); err != nil {
+		t.Fatal(err)
+	}
+	if err = Add(ctx, db, added); err == nil {
+		t.Fatal("duplicate browser event accepted")
+	}
 	if err = Replace(ctx, db, config.Config{}); err == nil {
 		t.Fatal("invalid catalog accepted")
 	}
 	cfg, err = Catalog(ctx, db, path)
-	if err != nil || cfg.Rooms[0].Title != "Updated event" {
+	if err != nil || cfg.Rooms[0].Title != "Updated event" || len(cfg.Rooms) != 2 || cfg.Rooms[1].AudiencePIN != "1234" {
 		t.Fatalf("atomic import: %+v %v", cfg, err)
 	}
 }

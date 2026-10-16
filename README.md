@@ -398,3 +398,30 @@ speech/translation backups, a provisioned Grafana dashboard, Prometheus alerts
 and offline load/failure tests are included. See [Phase 4 setup and validation](docs/PHASE4.md)
 for deployment commands, test coverage and operational limits. The two-node
 Compose stack defaults to fake providers and spends no Sarvam credits.
+
+
+### Organise an event in your browser
+
+Open `/admin` and enter your admin access key. Choose **Create event**, name the
+event, select the spoken language and audience translations, then create it.
+The event workspace shows **This is the link to share**: copy that audience link
+or print its QR poster. Use **Download QR image** to save a PNG for WhatsApp,
+or **Share QR** to open your phone’s share sheet (with a download fallback on
+unsupported browsers). Audience members open `/r/<event-id>` and choose a language.
+Never send them your admin key or private speaker link.
+
+Choose **Start speaking** to open the speaker console. It defaults to the
+microphone. Allow microphone access, then press **Start speaking** there to begin.
+The microphone stays off until this second action. Pause and stop controls remain
+next to the microphone, and the transcript appears alongside them.
+
+If somebody else is speaking, create a separate private speaker link from the
+event workspace; it expires after 12 hours. Advanced controls include session
+names, transcripts, display links, PIN access and retention settings.
+
+Browser-created events persist in `data/events.yaml` in file mode, or in the
+PostgreSQL event catalog. On a single server they become usable immediately,
+without a restart. Multi-server deployments retain explicit room assignments;
+the UI explains when a deployment administrator must configure a new owner.
+If the audience link contains `localhost`, configure `PUBLIC_URL` with your
+public HTTPS address before sharing it beyond your own computer.

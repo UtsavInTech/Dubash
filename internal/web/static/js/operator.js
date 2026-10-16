@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const EVENT_ENDED = 4001;
 const REVOKED = 4003;
 let languages = [];
+let ready = false;
 
 // A speaker link carries its token in the URL fragment (#token=…), which
 // the browser never sends to a server; the page takes it and removes it
@@ -20,7 +21,10 @@ function storedToken() {
   try { return localStorage.getItem(consoleKey) ?? localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
 }
 function storeToken(t) {
-  try { localStorage.setItem(t.startsWith(SPEAKER) ? consoleKey : 'dubash.token', t); } catch { /* private mode */ }
+  try {
+    localStorage.setItem(t.startsWith(SPEAKER) ? consoleKey : 'dubash.token', t);
+    if (!t.startsWith(SPEAKER)) localStorage.removeItem(consoleKey);
+  } catch { /* private mode */ }
 }
 const linked = new URLSearchParams(location.hash.slice(1)).get('token') ?? params.get('token');
 if (linked) {
@@ -35,6 +39,7 @@ let ctx, node, ws, stream, player, sentBytes = 0;
 function setStatus(text, live = false) {
   $('status').textContent = text;
   $('status').classList.toggle('live', live);
+  $('status').classList.toggle('is-live', live);
 }
 function fail(msg) {
   $('error').textContent = msg;
@@ -47,9 +52,9 @@ async function detect() {
     s.getTracks().forEach((t) => t.stop());
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
     const select = $('source');
-    select.replaceChildren(new Option('Audio file', 'file'),
+    select.replaceChildren(new Option('Default microphone', 'default'), new Option('Play an audio file instead', 'file'),
       ...devices.map((d, i) => new Option(`Microphone: ${d.label || `input ${i + 1}`}`, d.deviceId)));
-    select.value = devices[0]?.deviceId ?? 'file';
+    select.value = devices[0]?.deviceId ?? 'default';
     toggleFileRow();
   } catch (e) {
     $('error').textContent = `Could not use the microphone: ${e.message}`;
@@ -76,7 +81,13 @@ async function start() {
   // Disabled until stop()/fail(): a second click while this awaits the
   // worklet or the microphone would open a second socket and leave the
   // first one holding the room with no audio.
+  if (!ready) return;
+  setStatus('Connecting…');
+  $('start').textContent = 'Connecting…';
   $('start').disabled = true;
+  $('source').disabled = true;
+  $('detect').disabled = true;
+  $('file').disabled = true;
   $('spoken').disabled = true;
   $('talk').disabled = true;
   $('error').textContent = '';
@@ -103,7 +114,7 @@ async function start() {
     src.connect(ctx.destination); // the operator hears the file
   } else {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: $('source').value }, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      audio: { ...($('source').value === 'default' ? {} : { deviceId: { exact: $('source').value } }), channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
     src = ctx.createMediaStreamSource(stream);
   }
@@ -130,7 +141,8 @@ async function start() {
   sock.binaryType = 'arraybuffer';
   sock.onopen = () => {
     if (sock !== ws) return;
-    setStatus('Live', true);
+    setStatus('Live · Captions on', true);
+    $('start').textContent = 'You’re live';
     $('stop').disabled = false;
     $('pause').disabled = false;
     setPaused(false);
@@ -168,12 +180,12 @@ function setPaused(on) {
   paused = on;
   $('pause').textContent = on ? 'Resume' : 'Pause';
   $('pause').setAttribute('aria-pressed', String(on));
-  if (ws) setStatus(on ? 'Paused' : 'Live', !on);
+  if (ws) setStatus(on ? 'Paused · Audio off' : 'Live · Captions on', !on);
 }
 
 async function control(action) {
   const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/${action}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` },
+    method: 'POST', headers: { 'X-Dubash-Token': $('token').value.trim() },
   });
   if (!res.ok) throw new Error(res.status === 401 ? 'The token was rejected (expired or revoked?).' : `${action} failed: ${res.status}`);
   setPaused((await res.json()).paused);
@@ -182,9 +194,9 @@ async function control(action) {
 // audience shows how many people read each language, and how fast.
 async function audience() {
   const token = $('token').value.trim();
-  if (!token) return;
+
   try {
-    const res = await fetch('/api/admin/status', { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch('/api/admin/status', { headers: { 'X-Dubash-Token': token } });
     if (!res.ok) return;
     const st = (await res.json()).find((r) => r.id === roomId);
     if (!st) return;
@@ -207,13 +219,17 @@ function stop() {
   ctx?.close().catch(() => {});
   ctx = null;
   $('level').style.clipPath = '';
-  $('start').disabled = false;
+  $('start').disabled = !ready;
+  $('start').textContent = 'Start speaking';
+  $('source').disabled = false;
+  $('detect').disabled = !ready;
+  $('file').disabled = false;
   $('spoken').disabled = false;
   $('talk').disabled = false;
   $('stop').disabled = true;
   $('pause').disabled = true;
   setPaused(false);
-  setStatus('Stopped');
+  setStatus('Not live');
   if ($('source').value === 'file' && $('player').src) loadFile($('player').src);
 }
 
@@ -248,6 +264,7 @@ function preview(room) {
     p.tabIndex = 0;
     p.onclick = () => fixLine(p);
     p.onkeydown = (ev) => { if (ev.key === 'Enter') fixLine(p); };
+    $('transcript-empty').hidden = true;
     lines.append(p);
     while (lines.children.length > 8) lines.firstChild.remove();
     $('interim').textContent = '';
@@ -258,10 +275,11 @@ function preview(room) {
     const p = lines.querySelector(`[data-id="${seg.id}"]`);
     if (p && !p.querySelector('input')) p.textContent = seg.text;
   });
-  events.addEventListener('interim', (e) => { $('interim').textContent = JSON.parse(e.data).text; });
+  events.addEventListener('interim', (e) => { $('transcript-empty').hidden = true; $('interim').textContent = JSON.parse(e.data).text; });
+  window.addEventListener('pagehide', () => { events.close(); stop(); }, { once: true });
   const main = room.targets[0] ?? room.source;
   const outputs = [
-    ['Audience page', 'For phones', `/r/${roomId}?lang=${main}`],
+    ['Audience page', 'For phones', `/r/${roomId}`],
     ['Stage screen', 'For the projector, with the QR code', `/r/${roomId}?lang=${main}&mode=screen`],
     ['OBS or vMix overlay', 'Browser Source with a transparent background', `/r/${roomId}?lang=${main}&mode=overlay`],
     ['QR poster', 'A4, to print', `/posters?room=${roomId}`],
@@ -304,7 +322,7 @@ function fixLine(p) {
     try {
       const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/segments/${p.dataset.id}/correct`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${$('token').value.trim()}` },
+        headers: { 'X-Dubash-Token': $('token').value.trim() },
         body: new URLSearchParams({ text }),
       });
       if (!res.ok) throw new Error(res.status === 404 ? 'That line is too old to fix here.' : (await res.text()).trim());
@@ -357,6 +375,27 @@ async function main() {
   $('spoken').onchange = showTranslations;
   showTranslations();
   for (const a of document.querySelectorAll('[data-sample]')) a.closest('span').hidden = !languages.includes(a.dataset.sample);
+  let authorized = false;
+  try {
+    const response = await fetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/links`, { headers: { 'X-Dubash-Token': $('token').value.trim() } });
+    if (response.ok) {
+      authorized = true;
+      const links = await response.json();
+      $('audience-url').value = links.audience;
+      $('copy-audience').disabled = false;
+      $('audience-open').href = links.audience;
+    } else {
+      $('audience-url').value = `${location.origin}/r/${roomId}`;
+      $('audience-open').href = `/r/${roomId}`;
+      if (response.status === 401 || response.status === 403) {
+        $('error').textContent = 'Enter your speaker access key below, or open this console from your admin studio.';
+        $('token').closest('details').open = true;
+      }
+    }
+  } catch { $('error').textContent = 'Could not load the event links. Check your connection.'; }
+  if ($('token').value.startsWith(SPEAKER)) { $('admin-back').hidden = true; $('back-events').href = '/'; $('back-events').textContent = '← Audience home'; }
+  ready = !why && authorized;
+  $('start').disabled = !ready;
   preview(room);
   $('detect').onclick = detect;
   $('source').onchange = toggleFileRow;
@@ -375,4 +414,16 @@ async function main() {
   toggleFileRow();
 }
 
-main();
+$('copy-audience').onclick = async () => {
+  try { await navigator.clipboard.writeText($('audience-url').value); }
+  catch { $('audience-url').focus(); $('audience-url').select(); if (!document.execCommand('copy')) { $('toast').textContent = 'Link selected. Use your device’s copy command.'; $('toast').hidden = false; return; } }
+  $('toast').textContent = 'Audience link copied. Ready to share.'; $('toast').hidden = false;
+  setTimeout(() => { $('toast').hidden = true; }, 4000);
+};
+$('token').onchange = () => {
+  const token = $('token').value.trim();
+  const changed = token !== storedToken();
+  storeToken(token);
+  if (changed && !ws) location.reload();
+};
+main().catch((e) => { $('error').textContent = `Could not load your event: ${e.message}`; });

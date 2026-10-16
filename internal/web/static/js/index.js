@@ -10,7 +10,7 @@ function langItem(room, l) {
 }
 
 function entry(room) {
-  const label = room.ended ? 'Ended' : room.paused ? 'Paused' : room.live ? 'Live' : 'Not streaming';
+  const label = room.ended ? 'Ended' : room.paused ? 'Paused' : room.live ? 'Live' : 'Starting soon';
   const status = el('span', { className: room.live && !room.paused ? 'status live' : 'status', textContent: label });
   const targets = room.targets.map((l) => NAMES[l] ?? l);
   const now = room.live && room.talkTitle ? `Now: ${room.talkTitle}. ` : '';
@@ -25,10 +25,17 @@ function entry(room) {
 
 async function load() {
   try {
-    const rooms = await (await fetch('/api/rooms')).json();
+    const res = await fetch('/api/rooms');
+    if (!res.ok) throw new Error('The event list is temporarily unavailable. Please try again.');
+    const rooms = await res.json();
+    document.getElementById('room-loading').hidden = true;
+    document.getElementById('room-error').hidden = true;
+    document.getElementById('room-empty').hidden = rooms.length > 0;
     document.getElementById('rooms').replaceChildren(...rooms.map(entry));
-  } catch {
-    // keep the last rendered list; the next poll retries
+  } catch (e) {
+    document.getElementById('room-loading').hidden = true;
+    document.getElementById('room-error').textContent = e.message;
+    document.getElementById('room-error').hidden = false;
   }
 }
 

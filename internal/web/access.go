@@ -167,6 +167,9 @@ func (a *access) joinCode(room string, revision int) string {
 // the WebSocket subprotocol (browsers cannot set headers on WebSockets),
 // or, for older clients, the token query parameter.
 func bearer(r *http.Request) string {
+	if key := r.Header.Get("X-Dubash-Token"); key != "" {
+		return key
+	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimPrefix(h, "Bearer ")
 	}
@@ -186,6 +189,9 @@ func (s *Server) who(r *http.Request) principal {
 	}
 	tok := bearer(r)
 	if tok == "" {
+		if s.signedOrganiser(r) {
+			return principal{role: roleAdmin}
+		}
 		return principal{}
 	}
 	if subtle.ConstantTimeCompare([]byte(tok), []byte(a.admin)) == 1 {

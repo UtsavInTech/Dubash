@@ -145,7 +145,7 @@ func session(ctx context.Context, endpoint, token string, chunks <-chan []byte, 
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	var opts *websocket.DialOptions
 	if token != "" {
-		opts = &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + token}}}
+		opts = &websocket.DialOptions{HTTPHeader: http.Header{"X-Dubash-Token": {token}}}
 	}
 	c, resp, err := websocket.Dial(dialCtx, endpoint, opts)
 	cancel()

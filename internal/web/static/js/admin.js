@@ -1,246 +1,254 @@
-// Modified by the Dubash contributors: English; pause, resume and end;
-// readers and delays per language.
+import { NAMES, el } from './langs.js';
+
 const $ = (id) => document.getElementById(id);
-const params = new URLSearchParams(location.search);
+let rooms = [], selected = '', connected = false, creating = false, publicBase = location.origin;
+let linkRequest, qrURL, toastTimer, refreshing = false, listSignature = '';
+try { $('token').value = localStorage.getItem('dubash.token') ?? ''; selected = sessionStorage.getItem('dubash.selected') ?? ''; } catch { /* Storage is optional. */ }
+const legacy = new URLSearchParams(location.search).get('token');
+if (legacy) { $('token').value = legacy; history.replaceState(null, '', location.pathname); }
+const auth = () => ({ 'X-Dubash-Token': $('token').value.trim() });
+const current = () => rooms.find((r) => r.id === selected);
 
-function storedToken() {
-  try { return localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
+function notify(text) {
+  $('toast').textContent = text; $('toast').hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000);
 }
-// An old bookmark may carry ?token=: take it and drop it from the address
-// bar (a URL ends up in history and logs).
-$('token').value = params.get('token') ?? storedToken();
-if (params.has('token')) {
-  try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ }
-  history.replaceState(null, '', location.pathname);
+async function request(path, options = {}) {
+  const res = await fetch(path, { ...options, headers: { ...auth(), ...options.headers } });
+  if (!res.ok) throw new Error((await res.text()).trim() || `Request failed (${res.status}).`);
+  return res;
 }
-const auth = () => ({ Authorization: `Bearer ${$('token').value.trim()}` });
+async function copy(input, message) {
+  try { await navigator.clipboard.writeText(input.value); notify(message); }
+  catch { input.focus(); input.select(); if (document.execCommand('copy')) notify(message); else notify('Link selected. Copy it with your device’s copy command.'); }
+}
+function status(s) { return s.ended ? 'Ended' : s.paused ? 'Paused' : s.live ? 'Live now' : 'Ready to start'; }
+function setState(node, s) { node.textContent = status(s); node.className = `event-state${s.live && !s.paused ? ' is-live' : ''}${s.ended ? ' is-ended' : ''}`; }
+function saveToken() { try { localStorage.setItem('dubash.token', $('token').value.trim()); } catch { /* Private mode. */ } }
+function showLogin() {
+  connected = false; location.replace('/login?next=/admin');
+}
+$('account').onclick = () => { location.href = '/login'; };
+$('sign-out').onclick = async () => { await fetch('/api/session', { method: 'DELETE' }); try { localStorage.removeItem('dubash.token'); } catch {} location.href = '/login'; };
+$('login-form').onsubmit = async (e) => { e.preventDefault(); await refresh(); };
+$('copy-audience').onclick = () => copy($('audience-url'), 'Audience link copied. Ready to share.');
+$('speaker-copy').onclick = () => copy($('speaker-url'), 'Private speaker link copied. Send only to your speaker.');
+$('speaker-hide').onclick = () => { $('speaker').hidden = true; $('speaker-url').value = ''; };
+$('event-menu-toggle').onclick = () => { const open = $('event-actions').hidden; $('event-actions').hidden = !open; $('event-menu-toggle').setAttribute('aria-expanded', String(open)); };
 
-// download fetches a file with the token, so the link itself needs none.
-async function download(path, open = false) {
-  const res = await fetch(path, { headers: auth() });
-  if (!res.ok) throw new Error(`${path}: ${(await res.text()).trim() || res.status}`);
-  const url = URL.createObjectURL(await res.blob());
-  if (open) window.open(url, '_blank', 'noopener');
-  else {
-    const a = el('a', { href: url, download: (res.headers.get('Content-Disposition') ?? '').match(/filename="([^"]+)"/)?.[1] ?? '' });
-    a.click();
+function renderList() {
+  const signature = JSON.stringify(rooms.map((r) => [r.id, r.title, status(r), r.source, r.targets]));
+  if (signature !== listSignature) {
+    const focused = document.activeElement?.dataset.event;
+    $('event-list').replaceChildren(...rooms.map((r) => {
+      const badge = el('span'); setState(badge, r);
+      const button = el('button', { type: 'button', className: 'event-item' }, badge, el('strong', { textContent: r.title }), el('small', { textContent: `${NAMES[r.source] ?? r.source} + ${r.targets.length} translation${r.targets.length === 1 ? '' : 's'}` }));
+      button.dataset.event = r.id; button.onclick = () => selectEvent(r.id);
+      return button;
+    }));
+    listSignature = signature;
+    if (focused) [...$('event-list').children].find((n) => n.dataset.event === focused)?.focus();
   }
+  for (const button of $('event-list').children) button.setAttribute('aria-pressed', String(button.dataset.event === selected));
+}
+function selectEvent(id) {
+  const changed = id !== selected || $('event-workspace').hidden;
+  selected = id;
+  try { sessionStorage.setItem('dubash.selected', id); } catch { /* Optional. */ }
+  renderList(); renderEvent();
+  if (changed) {
+    $('speaker').hidden = true; $('speaker-url').value = ''; $('event-actions').hidden = true;
+    $('event-menu-toggle').setAttribute('aria-expanded', 'false');
+    loadLinks(id);
+  }
+}
+function renderEvent() {
+  const s = current();
+  $('no-events').hidden = rooms.length > 0;
+  $('event-workspace').hidden = !s;
+  if (!s) return;
+  $('event-title').textContent = s.title; setState($('event-state'), s);
+  $('event-meta').textContent = [s.speaker && `With ${s.speaker}`, s.talkTitle && s.talkTitle, `Spoken in ${NAMES[s.source] ?? s.source}`].filter(Boolean).join(' · ');
+  $('event-languages').replaceChildren(...[s.source, ...s.targets].map((l) => el('span', { textContent: NAMES[l] ?? l, lang: l })));
+  $('stat-viewers').textContent = s.viewers; $('stat-lines').textContent = s.segments;
+  $('stat-delay').textContent = s.avgLatencyMs ? `${(s.avgLatencyMs / 1000).toFixed(1)}s` : '—';
+  $('speak-heading').textContent = s.ended ? 'This event has ended.' : s.live ? 'Your event is on air.' : 'Ready when you are.';
+  $('open-console').textContent = s.ended ? 'Open speaker console →' : s.live ? 'Open live console →' : 'Start speaking →';
+  $('end-event').disabled = s.ended;
+  $('delete-transcript').disabled = s.live;
+  $('new-talk').disabled = s.live;
+  $('event-health').textContent = s.errors ? `${s.errors} pipeline error${s.errors === 1 ? '' : 's'}. ${s.lastError ?? ''}` : 'No pipeline errors reported.';
+  $('event-cost').textContent = s.cost?.total ? `Estimated cost so far: ₹${s.cost.total.toFixed(2)}. Backup provider charges may be additional.` : '';
+}
+async function loadLinks(id) {
+  linkRequest?.abort(); linkRequest = new AbortController();
+  $('open-console').href = `/operator/${id}`;
+  $('audience-url').value = `${publicBase}/r/${id}`;
+  $('pin-note').hidden = true;
+  $('local-warning').hidden = true;
+  $('copy-audience').disabled = true;
+  $('download-qr').disabled = true;
+  $('share-qr').disabled = true;
+  if (qrURL) { URL.revokeObjectURL(qrURL); qrURL = null; }
+  $('event-qr').removeAttribute('src');
+  const room = current();
+  try {
+    const signal = linkRequest.signal;
+    const links = await (await request(`/api/admin/rooms/${id}/links`, { signal })).json();
+    if (selected !== id) return;
+    $('audience-url').value = links.audience;
+    $('open-console').href = `/operator/${id}`;
+    $('audience-preview').href = links.audience;
+    $('poster-link').href = `/posters?room=${id}`;
+    $('screen-link').href = `/r/${id}?mode=screen`;
+    $('overlay-link').href = `/r/${id}?mode=overlay`;
+    $('copy-audience').disabled = false;
+    const hostname = new URL(links.audience).hostname;
+    $('local-warning').hidden = !['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname);
+    $('export-links').replaceChildren(...[room.source, ...room.targets].map((l) => {
+      const button = el('button', { type: 'button', className: 'text-button', textContent: `Download SRT · ${NAMES[l] ?? l}` });
+      button.onclick = () => download(`/export/${id}/srt?lang=${l}`).catch(showError);
+      return button;
+    }));
+    const qr = await request(`/qr/${id}`, { signal });
+    const blob = await qr.blob(); if (selected !== id) return;
+    qrURL = URL.createObjectURL(blob); $('event-qr').src = qrURL;
+    $('download-qr').disabled = false;
+    $('share-qr').disabled = false;
+    const access = await (await fetch(`/api/rooms/${id}/access`, { signal, headers: auth() })).json();
+    if (selected !== id) return;
+    $('pin-note').hidden = !access.pin;
+    $('pin-note').textContent = 'This event has a PIN. Send the PIN separately to people opening the link. The QR code admits anyone who scans it.';
+  } catch (e) { if (e.name !== 'AbortError') showError(e); }
+}
+function showError(e) { $('error').textContent = e.message; }
+async function download(path, open = false) {
+  const res = await request(path); const url = URL.createObjectURL(await res.blob());
+  if (open) window.open(url, '_blank', 'noopener');
+  else { const a = el('a', { href: url, download: (res.headers.get('Content-Disposition') ?? '').match(/filename="([^"]+)"/)?.[1] ?? 'transcript.srt' }); document.body.append(a); a.click(); a.remove(); }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-$('metrics').onclick = () => download('/metrics', true).catch((e) => { $('error').textContent = e.message; });
-
-// speakerLink mints a console link for one event.
-async function speakerLink(s) {
-  const hours = prompt(`Speaker link for ${s.title}: valid for how many hours (at most 72)?`, '12');
-  if (hours === null) return;
-  const res = await fetch(`/api/admin/rooms/${s.id}/publisher-tokens`, {
-    method: 'POST', headers: { ...auth(), 'Content-Type': 'application/json' }, body: JSON.stringify({ hours: Number(hours) }),
-  });
-  if (!res.ok) throw new Error(`Could not make the link: ${(await res.text()).trim()}`);
-  const out = await res.json();
-  $('speaker-title').textContent = `Speaker link: ${s.title} (until ${new Date(out.expires).toLocaleString()})`;
-  $('speaker-url').value = out.console;
-  $('speaker').hidden = false;
-  $('speaker-url').select();
+// PNG works in messaging apps and phone galleries; SVG is kept for crisp on-page display.
+async function qrFile(id) {
+  const response = await request(`/qr/${id}?format=png&download=1`);
+  return new File([await response.blob()], `${id}-qr.png`, { type: 'image/png' });
 }
-$('speaker-copy').onclick = () => navigator.clipboard.writeText($('speaker-url').value).catch(() => $('speaker-url').select());
-$('speaker-hide').onclick = () => { $('speaker').hidden = true; $('speaker-url').value = ''; };
-
-async function revokeLinks(s) {
-  if (!confirm(`Revoke every speaker link of ${s.title}? A console using one is cut off.`)) return;
-  const res = await fetch(`/api/admin/rooms/${s.id}/publisher-tokens/revoke`, { method: 'POST', headers: auth() });
-  if (!res.ok) throw new Error(`Could not revoke: ${(await res.text()).trim()}`);
-  $('error').textContent = '';
-  refresh();
+function saveQR(file) {
+  const url = URL.createObjectURL(file);
+  const a = el('a', { href: url, download: file.name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-
-async function deleteTranscript(s) {
-  if (!confirm(`Delete the whole transcript of ${s.title}, with its live fixes? This cannot be undone.`)) return;
-  const res = await fetch(`/api/admin/rooms/${s.id}/transcript`, { method: 'DELETE', headers: auth() });
-  if (!res.ok) throw new Error(`Could not delete: ${(await res.text()).trim()}`);
-  refresh();
-}
-$('token').onchange = () => { try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ } refresh(); };
-
-function ago(iso) {
-  if (!iso || iso.startsWith('0001')) return '—';
-  const s = Math.round((Date.now() - new Date(iso)) / 1000);
-  return s < 60 ? `${s} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
-}
-
-// Translation latency budget: under 1.5 s reads as live, over 3 s lags.
-function latencyClass(ms) {
-  return ms < 1500 ? 'lat-ok' : ms < 3000 ? 'lat-warn' : 'lat-bad';
-}
-
-function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
-  return node;
-}
-
-function link(label, href) {
-  return el('a', { href, target: '_blank', textContent: label });
-}
-
-// Seconds since an ISO time, or Infinity if never.
-function since(iso) {
-  return !iso || iso.startsWith('0001') ? Infinity : (Date.now() - new Date(iso)) / 1000;
-}
-
-// Audio: what reaches the server. A live room with no audio, or only
-// silence, is the most common failure at a venue (muted channel, wrong input).
-function audioCell(s) {
-  if (!s.live) return el('td', { className: 'num', textContent: '—' });
-  const quiet = since(s.lastAudioAt) > 5;
-  const level = el('span', {
-    className: quiet ? 'lat-bad' : s.audioLevel < -50 ? 'lat-warn' : 'lat-ok',
-    textContent: quiet ? 'Not arriving' : s.audioLevel < -50 ? 'Silent' : `${Math.round(s.audioLevel)} dB`,
-  });
-  return el('td', { className: 'num' }, level, el('span', { className: 'sub', textContent: `${Math.round(s.audioSeconds)} s received` }));
-}
-
-// Text: when the recognizer last produced anything. Audio with voice but
-// no text for a while means transcription is stuck.
-function textCell(s) {
-  const ago_ = since(s.lastTextAt);
-  const stuck = s.live && s.audioLevel >= -50 && ago_ > 15;
-  return el('td', { className: 'num' },
-    el('span', { className: stuck ? 'lat-bad' : '', textContent: ago(s.lastTextAt) }),
-    el('span', { className: 'sub', textContent: s.segments ? `last line ${ago(s.lastSegmentAt)}` : '' }));
-}
-
-async function newTalk(s) {
-  const title = prompt(`New session in ${s.title}. Title (optional):`, '');
-  if (title === null) return;
-  const res = await fetch(`/api/admin/rooms/${s.id}/talks`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${$('token').value}` },
-    body: new URLSearchParams({ title }),
-  });
-  if (!res.ok) $('error').textContent = `Could not start the session: ${await res.text()}`;
-  refresh();
-}
-
-// control pauses, resumes or ends an event.
-async function control(s, action) {
-  if (action === 'end' && !confirm(`End ${s.title}? The speaker's console stops and readers see that the event is over.`)) return;
-  const res = await fetch(`/api/admin/rooms/${s.id}/${action}`, {
-    method: 'POST', headers: { Authorization: `Bearer ${$('token').value}` },
-  });
-  if (!res.ok) $('error').textContent = `${action} failed: ${await res.text()}`;
-  refresh();
-}
-
-// Cost: what recognition and each language's translation have cost so
-// far, and the rate per hour of recognized audio.
-function costCell(s) {
-  const c = s.cost;
-  if (!c || !c.total) return el('td', { className: 'num', textContent: '—' });
-  const per = Object.entries(c.translation ?? {}).map(([l, v]) => `${l.toUpperCase()} ₹${v.toFixed(2)}`);
-  return el('td', { className: 'num' }, `₹${c.total.toFixed(2)}`,
-    el('span', { className: 'sub', textContent: `speech ₹${c.speech.toFixed(2)}${c.correction ? ` · correction ₹${c.correction.toFixed(2)}` : ''}${per.length ? ` · ${per.join(' · ')}` : ''}` }),
-    el('span', { className: 'sub', textContent: c.perHour ? `₹${c.perHour.toFixed(0)} per hour` : '' }));
-}
-
-// Readers per language, and how long each language's translations take.
-function readersCell(s) {
-  const per = Object.entries(s.listeners ?? {}).filter(([l]) => l).map(([l, n]) => `${l.toUpperCase()} ${n}`);
-  return el('td', { className: 'num' }, String(s.viewers), el('span', { className: 'sub', textContent: per.join(' · ') }));
-}
-
-function delayCell(s) {
-  const tr = Object.entries(s.translation ?? {});
-  if (!tr.length) return el('td', { className: 'num', textContent: '—' });
-  const worst = Math.max(...tr.map(([, v]) => v.p95));
-  return el('td', { className: 'num' },
-    el('span', { className: latencyClass(worst), textContent: `${(worst / 1000).toFixed(1)} s p95` }),
-    ...tr.map(([l, v]) => el('span', { className: 'sub', textContent: `${l.toUpperCase()} ${(v.p50 / 1000).toFixed(1)} / ${(v.p95 / 1000).toFixed(1)} s` })),
-    el('span', { className: 'sub', textContent: s.commitLag?.n ? `commit ${(s.commitLag.p50 / 1000).toFixed(1)} s` : '' }));
-}
-
-function row(s) {
-  const label = s.ended ? 'Ended' : s.paused ? 'Paused' : s.live ? 'Live' : 'Idle';
-  const state = el('span', { className: s.live && !s.paused ? 'status live' : 'status', textContent: label });
-  const errors = el('td', { className: 'num' }, String(s.errors));
-  if (s.lastError) errors.append(el('span', { className: 'last-error', textContent: s.lastError }));
-  // The console reads the admin token this page saved: none in the link.
-  const links = [link('Console', `/operator/${s.id}`), ' · ', link('View', `/r/${s.id}`),
-    ' · ', link('Screen', `/r/${s.id}?mode=screen`)];
-  const talkQuery = s.talk ? `&talk=${s.talk}` : '';
-  for (const l of [s.source, ...s.targets]) {
-    const a = link(`SRT ${l.toUpperCase()}`, `/export/${s.id}/srt?lang=${l}${talkQuery}`);
-    a.onclick = (e) => { e.preventDefault(); download(a.getAttribute('href')).catch((err) => { $('error').textContent = err.message; }); };
-    links.push(' · ', a);
-  }
-  const button = el('button', { type: 'button', className: 'button secondary small', textContent: 'New session' });
-  button.onclick = () => newTalk(s).catch((e) => { $('error').textContent = e.message; });
-  const actions = [button];
-  const mint = el('button', { type: 'button', className: 'button secondary small', textContent: 'Speaker link' });
-  mint.onclick = () => speakerLink(s).catch((e) => { $('error').textContent = e.message; });
-  const revoke = el('button', { type: 'button', className: 'button secondary small', textContent: 'Revoke links' });
-  revoke.onclick = () => revokeLinks(s).catch((e) => { $('error').textContent = e.message; });
-  actions.push(' ', mint, ' ', revoke);
-  if (!s.live) {
-    const del = el('button', { type: 'button', className: 'button secondary small', textContent: 'Delete transcript' });
-    del.onclick = () => deleteTranscript(s).catch((e) => { $('error').textContent = e.message; });
-    actions.push(' ', del);
-  }
-  if (s.live) {
-    const pause = el('button', { type: 'button', className: 'button secondary small', textContent: s.paused ? 'Resume' : 'Pause' });
-    pause.onclick = () => control(s, s.paused ? 'resume' : 'pause').catch((e) => { $('error').textContent = e.message; });
-    actions.push(' ', pause);
-  }
-  const end = el('button', { type: 'button', className: 'button secondary small', textContent: 'End event' });
-  end.onclick = () => control(s, 'end').catch((e) => { $('error').textContent = e.message; });
-  actions.push(' ', end);
-  const talk = s.talk ? `Session ${s.talk}${s.talkTitle ? `: ${s.talkTitle}` : ''}` : 'No sessions yet';
-  return el('tr', {},
-    el('th', { scope: 'row' }, s.title,
-      el('span', { className: 'sub', textContent: `${s.id} · ${s.source.toUpperCase()} → ${s.targets.map((t) => t.toUpperCase()).join(', ') || '—'}` }),
-      el('span', { className: 'sub', textContent: talk })),
-    el('td', {}, state),
-    audioCell(s),
-    textCell(s),
-    readersCell(s),
-    el('td', { className: 'num', textContent: String(s.segments) }),
-    delayCell(s),
-    errors,
-    costCell(s),
-    el('td', { className: 'links' }, ...links, el('div', {}, ...actions)));
-}
-
-function summary(rooms) {
-  const sum = (f) => rooms.reduce((n, r) => n + f(r), 0);
-  const segs = sum((r) => r.segments);
-  const errs = sum((r) => r.errors);
-  const live = rooms.filter((r) => r.live).length;
-  const set = (id, v) => { $(id).querySelector('b').textContent = v; };
-  set('sum-live', `${live} of ${rooms.length}`);
-  set('sum-viewers', sum((r) => r.viewers));
-  set('sum-segments', segs);
-  set('sum-latency', segs ? `${(sum((r) => r.avgLatencyMs * r.segments) / segs / 1000).toFixed(1)} s` : '—');
-  set('sum-errors', errs);
-  $('sum-live').classList.toggle('good', live > 0);
-  $('sum-errors').classList.toggle('alert', errs > 0);
-}
-
-async function refresh() {
+$('download-qr').onclick = async () => {
+  const id = selected; $('download-qr').disabled = true;
+  try { saveQR(await qrFile(id)); notify('QR image downloaded. Attach it in WhatsApp or your invitation.'); }
+  catch (e) { showError(e); }
+  finally { if (selected === id) $('download-qr').disabled = false; }
+};
+$('share-qr').onclick = async () => {
+  const s = current(); if (!s) return;
+  const audienceURL = $('audience-url').value;
+  $('share-qr').disabled = true;
   try {
-    const res = await fetch('/api/admin/status', { headers: { Authorization: `Bearer ${$('token').value}` } });
-    if (res.status === 401) {
-      $('error').textContent = 'Invalid token.';
-      return;
+    const file = await qrFile(s.id);
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title: s.title, text: `Join ${s.title}. Scan the QR code or open ${audienceURL} and choose your language.`, files: [file] });
+      notify('QR shared.');
+    } else {
+      saveQR(file); notify('QR downloaded. Attach the image in WhatsApp or another messaging app.');
     }
-    const rooms = await res.json();
-    $('error').textContent = '';
-    summary(rooms);
-    $('rows').replaceChildren(...rooms.map(row));
-    $('updated').textContent = `Updated at ${new Date().toLocaleTimeString()}`;
-  } catch (e) {
-    $('error').textContent = `No connection: ${e.message}`;
-  }
+  } catch (e) { if (e.name !== 'AbortError') showError(e); }
+  finally { if (selected === s.id) $('share-qr').disabled = false; }
+};
+$('metrics').onclick = () => download('/metrics', true).catch(showError);
+$('make-speaker').onclick = async () => {
+  const s = current(); if (!s) return;
+  $('make-speaker').disabled = true;
+  try {
+    const out = await (await request(`/api/admin/rooms/${s.id}/publisher-tokens`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hours: 12 }) })).json();
+    if (selected !== s.id) return;
+    $('speaker-url').value = out.console;
+    $('speaker-title').textContent = `Only share this with your speaker. It opens this event’s microphone console and expires ${new Date(out.expires).toLocaleString()}.`;
+    $('speaker').hidden = false; $('speaker-url').focus();
+  } catch (e) { showError(e); } finally { $('make-speaker').disabled = false; }
+};
+async function action(kind) {
+  const s = current(); if (!s) return;
+  let path = `/api/admin/rooms/${s.id}/`, method = 'POST', body;
+  if (kind === 'end' && !confirm(`End ${s.title}? This stops the speaker and tells your audience the event is over.`)) return;
+  if (kind === 'publisher-tokens/revoke' && !confirm(`Revoke all private speaker links for ${s.title}?`)) return;
+  if (kind === 'transcript') { if (!confirm(`Permanently delete the transcript for ${s.title}?`)) return; method = 'DELETE'; }
+  if (kind === 'talks') { const title = prompt('Name the next session (optional):', ''); if (title === null) return; body = new URLSearchParams({ title }); }
+  await request(path + kind, { method, body });
+  notify('Event updated.'); await refresh();
 }
+$('new-talk').onclick = () => action('talks').catch(showError);
+$('end-event').onclick = () => action('end').catch(showError);
+$('revoke').onclick = () => action('publisher-tokens/revoke').catch(showError);
+$('delete-transcript').onclick = () => action('transcript').catch(showError);
 
-refresh();
-setInterval(refresh, 2000);
+// Event setup. Native dialog supplies focus trapping, Escape and focus return.
+const defaults = new Set(['en', 'te', 'kn', 'ta']);
+const english = { hi: 'Hindi', te: 'Telugu', kn: 'Kannada', ta: 'Tamil', bn: 'Bengali', mr: 'Marathi', gu: 'Gujarati', ml: 'Malayalam', or: 'Odia', pa: 'Punjabi' };
+$('event-source').replaceChildren(...Object.entries(NAMES).map(([code, label]) => new Option(english[code] ? `${english[code]} · ${label}` : label, code)));
+$('event-source').value = 'hi';
+for (const [code, label] of Object.entries(NAMES)) {
+  const input = el('input', { type: 'checkbox', value: code, name: 'target', checked: defaults.has(code) });
+  const node = el('label', { className: 'language-option' }, input, el('span', { textContent: label, lang: code }));
+  node.title = english[code] ?? label; $('target-languages').append(node);
+}
+function sourceChanged() { for (const input of $('target-languages').querySelectorAll('input')) { input.parentElement.hidden = input.value === $('event-source').value; if (input.value === $('event-source').value) input.checked = false; } }
+$('event-source').onchange = sourceChanged; sourceChanged();
+let slugEdited = false;
+const slug = (text) => text.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
+$('event-slug').oninput = () => { slugEdited = true; };
+$('event-name').oninput = () => { if (!slugEdited) $('event-slug').value = slug($('event-name').value) || `event-${Date.now().toString(36)}`; };
+function openCreate() {
+  if (!connected) { showLogin(); return; }
+  if ($('create-open').disabled) { notify('Event creation is managed by your deployment administrator.'); return; }
+  $('create-error').textContent = ''; $('create-dialog').showModal();
+}
+$('create-open').onclick = openCreate; $('create-empty').onclick = openCreate;
+$('create-close').onclick = () => { if (!creating) $('create-dialog').close(); };
+$('create-dialog').addEventListener('cancel', (e) => { if (creating) e.preventDefault(); });
+$('create-form').addEventListener('invalid', (e) => { const details = e.target.closest('details'); if (details) details.open = true; }, true);
+$('create-form').onsubmit = async (e) => {
+  e.preventDefault(); if (creating) return;
+  creating = true; $('create-submit').disabled = true; $('create-submit').textContent = 'Creating…'; $('create-error').textContent = '';
+  try {
+    const input = { title: $('event-name').value.trim(), id: $('event-slug').value.trim(), speaker: $('event-speaker').value.trim(), source: $('event-source').value, targets: [...$('target-languages').querySelectorAll('input:checked')].filter((i) => !i.parentElement.hidden).map((i) => i.value), audiencePIN: $('event-pin').value, retentionDays: Number($('event-retention').value), exports: $('event-exports').value };
+    const out = await (await request('/api/admin/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })).json();
+    selected = out.id; rooms.push(out); listSignature = ''; renderList(); renderEvent(); loadLinks(out.id);
+    $('create-dialog').close(); $('create-form').reset(); $('event-source').value = 'hi';
+    for (const input of $('target-languages').querySelectorAll('input')) input.checked = defaults.has(input.value);
+    sourceChanged(); slugEdited = false;
+    $('notice').textContent = 'Your event is ready. Copy the audience link below, then open your speaker console.'; $('notice').hidden = false;
+    notify('Event created. Your audience link is ready.'); await refresh(); $('event-title').scrollIntoView({ block: 'nearest' });
+  } catch (err) { $('create-error').textContent = err.message; const field = $('event-slug'); if (err.message.includes('link')) { field.closest('details').open = true; field.focus(); } }
+  finally { creating = false; $('create-submit').disabled = false; $('create-submit').textContent = 'Create event →'; }
+};
+async function refresh() {
+  if (refreshing) return; refreshing = true;
+  try {
+    const res = await fetch('/api/admin/status', { headers: auth() });
+    if (res.status === 401 || res.status === 403) { showLogin(); if ($('token').value) $('error').textContent = 'That key could not open the organiser studio. Use your admin access key, not a speaker link.'; return; }
+    if (!res.ok) throw new Error('Could not load your events. Please try again.');
+    const next = await res.json(); if (!Array.isArray(next)) throw new Error('Unexpected event response.');
+    const initial = !connected; rooms = next; connected = true; saveToken();
+    $('login').hidden = true; $('studio').hidden = false; $('error').textContent = '';
+    $('event-count').textContent = rooms.length; $('list-count').textContent = rooms.length;
+    $('live-count').textContent = rooms.filter((r) => r.live && !r.paused).length;
+    $('viewer-count').textContent = rooms.reduce((sum, r) => sum + r.viewers, 0);
+    $('updated').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    if (!rooms.some((r) => r.id === selected)) selected = rooms[0]?.id ?? '';
+    renderList(); renderEvent();
+    if (initial) {
+      if (selected) loadLinks(selected);
+      const caps = await (await request('/api/admin/events')).json();
+      $('create-open').disabled = !caps.create; $('create-empty').disabled = !caps.create;
+      if (!caps.create) { $('notice').textContent = caps.reason; $('notice').hidden = false; }
+    }
+  } catch (e) { showError(e); } finally { refreshing = false; }
+}
+fetch('/api/site').then((r) => r.json()).then((site) => { publicBase = site.url.replace(/\/$/, ''); }).catch(() => {});
+refresh(); setInterval(() => { if (connected) refresh(); }, 4000);

@@ -146,3 +146,31 @@ func replace(ctx context.Context, tx pgx.Tx, cfg config.Config) error {
 	_, err := tx.Exec(ctx, `INSERT INTO dubash_event_catalog(singleton) VALUES(true) ON CONFLICT DO NOTHING`)
 	return err
 }
+
+// Add persists an additional event without replacing existing definitions.
+func Add(ctx context.Context, db *pgxpool.Pool, rc config.Room) error {
+	data, err := yaml.Marshal(config.Config{Rooms: []config.Room{rc}})
+	if err != nil {
+		return err
+	}
+	validated, err := config.Parse(data)
+	if err != nil {
+		return err
+	}
+	data, err = yaml.Marshal(validated.Rooms[0])
+	if err != nil {
+		return err
+	}
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.WithoutCancel(ctx))
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7263)`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO dubash_events(id,definition,position) SELECT $1,$2,COALESCE(MAX(position),-1)+1 FROM dubash_events`, rc.ID, data); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}

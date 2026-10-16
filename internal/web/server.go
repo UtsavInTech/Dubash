@@ -36,16 +36,21 @@ var embedded embed.FS
 
 // Server routes requests to rooms.
 type Server struct {
-	rooms  map[string]*room.Room
-	order  []*room.Room
-	store  *store.Store
-	token  string
-	log    *slog.Logger
-	static fs.FS
+	roomsMu     sync.RWMutex
+	createMu    sync.Mutex
+	CreateEvent EventFactory
+	rooms       map[string]*room.Room
+	order       []*room.Room
+	store       *store.Store
+	token       string
+	log         *slog.Logger
+	static      fs.FS
 
 	// PublicURL is the audience-facing base URL (https://subs.example.org)
 	// encoded in QR codes. Empty means the URL the request came in on.
-	PublicURL string
+	PublicURL     string
+	Demo          bool
+	TemporaryData bool
 
 	// Bank is the Dictation Bank store; nil disables its pages and API.
 	Bank bank.Store
@@ -113,8 +118,11 @@ func (s *Server) UseState(dir, secret string) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.accessRoutes(mux)
+	s.sessionRoutes(mux)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(s.static)))
 	mux.HandleFunc("GET /{$}", s.page("index.html"))
+	mux.HandleFunc("GET /login", s.page("login.html"))
+	mux.HandleFunc("GET /events", s.page("discover.html"))
 	mux.HandleFunc("GET /r/{room}", s.page("viewer.html"))
 	mux.HandleFunc("GET /operator/{room}", s.page("operator.html"))
 	mux.HandleFunc("GET /admin", s.page("admin.html"))
@@ -135,6 +143,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /ingest/{room}", s.publisher(s.ingest))
 	mux.HandleFunc("GET /export/{room}/{format}", s.export)
 	mux.Handle("GET /samples/", http.StripPrefix("/samples/", http.FileServer(http.Dir("samples"))))
+	s.manageRoutes(mux)
 	s.bankRoutes(mux)
 	return s.secure(mux)
 }
@@ -166,7 +175,7 @@ func (s *Server) serviceWorker(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) room(w http.ResponseWriter, r *http.Request) (*room.Room, bool) {
-	rm, ok := s.rooms[r.PathValue("room")]
+	rm, ok := s.findRoom(r.PathValue("room"))
 	if !ok {
 		http.Error(w, "unknown room", http.StatusNotFound)
 	}
@@ -186,8 +195,9 @@ type roomInfo struct {
 }
 
 func (s *Server) listRooms(w http.ResponseWriter, _ *http.Request) {
-	out := make([]roomInfo, 0, len(s.order))
-	for _, rm := range s.order {
+	rooms := s.roomSnapshot()
+	out := make([]roomInfo, 0, len(rooms))
+	for _, rm := range rooms {
 		st := rm.Status()
 		out = append(out, roomInfo{ID: st.ID, Title: st.Title, Speaker: st.Speaker, Source: st.Source, Targets: st.Targets,
 			Live: st.Live, Paused: st.Paused, Ended: st.Ended, TalkTitle: st.TalkTitle})
@@ -205,8 +215,9 @@ func (s *Server) adminStatus(w http.ResponseWriter, r *http.Request) {
 
 // statuses snapshots every room, with its cost.
 func (s *Server) statuses() []room.Status {
-	out := make([]room.Status, 0, len(s.order))
-	for _, rm := range s.order {
+	rooms := s.roomSnapshot()
+	out := make([]room.Status, 0, len(rooms))
+	for _, rm := range rooms {
 		out = append(out, rm.Status())
 	}
 	costs(out, s.Prices, s.Meter, s.CorrectionMeter)
@@ -227,7 +238,7 @@ func (s *Server) baseURL(r *http.Request) string {
 }
 
 func (s *Server) site(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]string{"url": s.baseURL(r)})
+	writeJSON(w, map[string]string{"url": s.baseURL(r), "demo": strconv.FormatBool(s.Demo), "temporaryData": strconv.FormatBool(s.TemporaryData)})
 }
 
 // qr serves an SVG QR code that opens the room's captions, for the stage
@@ -256,13 +267,25 @@ func (s *Server) qr(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "image/svg+xml")
+	if r.URL.Query().Get("format") == "png" {
+		w.Header().Set("Content-Type", "image/png")
+		if r.URL.Query().Get("download") == "1" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-qr.png"`, cfg.ID))
+		}
+	} else {
+		w.Header().Set("Content-Type", "image/svg+xml")
+	}
 	if cfg.AudiencePIN != "" {
 		w.Header().Set("Cache-Control", "private, no-store")
 	} else {
 		w.Header().Set("Cache-Control", "public, max-age=300")
 	}
-	io.WriteString(w, qrSVG(code))
+	if r.URL.Query().Get("format") == "png" {
+		code.Scale = 16
+		w.Write(code.PNG())
+	} else {
+		io.WriteString(w, qrSVG(code))
+	}
 }
 
 // qrSVG draws code as one path, one horizontal run of dark modules per

@@ -1,0 +1,31 @@
+name: Frontend user journeys
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    env:
+      SARVAM_API_KEY: ""
+      SARVAM_PROBE: ""
+      GEMINI_API_KEY: ""
+      CORRECTION: rules
+      DATABASE_URL: ""
+      REDIS_URL: ""
+      NODE_URL: ""
+      ROOM_IDS: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+        working-directory: e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: ./e2e/run.sh

@@ -29,7 +29,7 @@ function qrImage(room, url) {
   const img = el('img', { alt: `QR code that opens ${url}`, width: 400, height: 400 });
   let token = '';
   try { token = localStorage.getItem('dubash.token') ?? ''; } catch { /* private mode */ }
-  fetch(`/qr/${room.id}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  fetch(`/qr/${room.id}`, { headers: token ? { 'X-Dubash-Token': token } : {} })
     .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
     .then((b) => { img.src = URL.createObjectURL(b); })
     .catch(() => { img.alt = 'This event has a PIN: open the admin panel with the admin token first, then this page.'; });

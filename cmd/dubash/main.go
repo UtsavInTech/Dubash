@@ -63,6 +63,9 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		db.Close()
 	} else {
 		cfg, err = config.Load(roomsPath)
+		if err == nil {
+			cfg, err = config.WithCreated(cfg, filepath.Join(dataDir, "events.yaml"))
+		}
 	}
 	if err != nil {
 		return err
@@ -130,7 +133,30 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 
 	site := web.New(rs, st, token, log)
 	site.PublicURL = os.Getenv("PUBLIC_URL")
+	site.Demo = fake
+	site.TemporaryData = os.Getenv("DUBASH_TEMPORARY_DATA") == "on"
 	site.Catalog = catalog
+	if coordinator == nil {
+		site.CreateEvent = func(createCtx context.Context, rc config.Room) (*room.Room, error) {
+			rm, err := room.New(rc, deps)
+			if err != nil {
+				return nil, err
+			}
+			if databaseURL != "" {
+				db, err := eventdb.Open(createCtx, databaseURL)
+				if err != nil {
+					return nil, err
+				}
+				defer db.Close()
+				if err = eventdb.Add(createCtx, db, rc); err != nil {
+					return nil, err
+				}
+			} else if err = config.AddCreated(filepath.Join(dataDir, "events.yaml"), rc); err != nil {
+				return nil, err
+			}
+			return rm, nil
+		}
+	}
 	site.UseState(dataDir, os.Getenv("TOKEN_SECRET"))
 	site.TrustProxy = os.Getenv("TRUST_PROXY") == "on"
 	if v, err := strconv.Atoi(os.Getenv("MAX_VIEWERS")); err == nil {
