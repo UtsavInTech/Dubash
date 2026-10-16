@@ -4,11 +4,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dubash ./cmd/dubash \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/events ./cmd/events \
  && mkdir -p /out/data
 
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=build /out/dubash /app/dubash
+COPY --from=build /out/events /app/events
 COPY --from=build --chown=65532:65532 /out/data /data
 COPY rooms.yaml /app/rooms.yaml
 COPY samples/*.wav /app/samples/

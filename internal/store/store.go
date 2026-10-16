@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"io/fs"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 // Store writes segments under dir/{room}.jsonl.
 type Store struct {
+	pg  *pgxpool.Pool
 	dir string
 	mu  sync.Mutex
 }
@@ -40,6 +42,9 @@ func (s *Store) path(room string) string {
 
 // Append adds one segment to its room's file.
 func (s *Store) Append(seg caption.Segment) error {
+	if s.pg != nil {
+		return s.appendPG(seg)
+	}
 	line, err := json.Marshal(seg)
 	if err != nil {
 		return fmt.Errorf("encode segment: %w", err)
@@ -81,6 +86,9 @@ func latest(segs []caption.Segment) []caption.Segment {
 // 0, nil. Only I/O failures are errors, so one bad line never keeps the
 // server from starting.
 func (s *Store) Load(room string) (segs []caption.Segment, skipped int, err error) {
+	if s.pg != nil {
+		return s.loadPG(room)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f, err := os.Open(s.path(room))
