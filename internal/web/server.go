@@ -82,7 +82,9 @@ type Server struct {
 	viewersIP  map[string]int
 	rehearsing sync.Map // room → struct{}: one paid rehearsal at a time
 	liveMu     sync.Mutex
-	live       map[string]func() // room → its console's session, when a speaker link opened it
+	streamMu   sync.Mutex
+	streams    map[string]*streamSession // audio sessions over plain HTTP
+	live       map[string]func()         // room → its console's session, when a speaker link opened it
 
 	// drainGrace is how long a room's pipeline may keep finishing after
 	// its operator disconnects before it is cancelled.
@@ -122,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	s.accessRoutes(mux)
 	s.sessionRoutes(mux)
 	s.googleRoutes(mux)
+	s.streamRoutes(mux)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(s.static)))
 	mux.HandleFunc("GET /{$}", s.page("index.html"))
 	mux.HandleFunc("GET /login", s.page("login.html"))

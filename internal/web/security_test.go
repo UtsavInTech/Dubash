@@ -3,6 +3,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -400,5 +401,79 @@ func TestIngestBehindTLSProxyHostWithPort(t *testing.T) {
 		Subprotocols: []string{"dubash", "dubash-token." + adminTok}}); err == nil {
 		c.CloseNow()
 		t.Error("a cross-site page opened the console socket")
+	}
+}
+
+// Behind gateways without WebSockets the console streams over plain HTTP.
+func TestStreamOverHTTP(t *testing.T) {
+	_, srv := secureServer(t)
+	post := func(path, token string, body []byte) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	start := func(token string) (string, int) {
+		resp := post("/api/admin/rooms/open/stream?lang=hi", token, nil)
+		defer resp.Body.Close()
+		var out struct{ Session string }
+		json.NewDecoder(resp.Body).Decode(&out)
+		return out.Session, resp.StatusCode
+	}
+	sid, code := start(adminTok)
+	if code != http.StatusOK || sid == "" {
+		t.Fatalf("start: %d %q", code, sid)
+	}
+	waitFor(t, func() bool { return liveStatus(t, srv, "open") })
+	if _, code := start(adminTok); code != http.StatusConflict {
+		t.Errorf("second console while live: %d, want 409", code)
+	}
+	for range 10 {
+		if r := post("/api/admin/rooms/open/stream/"+sid, adminTok, make([]byte, 8000)); r.StatusCode != http.StatusNoContent {
+			t.Fatalf("chunk: %d", r.StatusCode)
+		}
+	}
+	// The fake recognizer turns audio into lines: they reach the transcript.
+	waitFor(t, func() bool {
+		r := do(t, nil, http.MethodGet, srv.URL+"/api/admin/status", adminTok, "")
+		return r.StatusCode == http.StatusOK
+	})
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/admin/rooms/open/stream/"+sid, nil)
+	req.Header.Set("Authorization", "Bearer "+adminTok)
+	if r, err := http.DefaultClient.Do(req); err != nil || r.StatusCode != http.StatusNoContent {
+		t.Fatalf("stop: %v %v", r, err)
+	}
+	waitFor(t, func() bool { return !liveStatus(t, srv, "open") })
+	r := post("/api/admin/rooms/open/stream/"+sid, adminTok, make([]byte, 100))
+	var gone struct{ Reason string }
+	json.NewDecoder(r.Body).Decode(&gone)
+	r.Body.Close()
+	if r.StatusCode != http.StatusGone {
+		t.Errorf("chunk after stop: %d, want 410", r.StatusCode)
+	}
+	if r := post("/api/admin/rooms/open/stream/nope", adminTok, nil); r.StatusCode != http.StatusNotFound {
+		t.Errorf("unknown session: %d", r.StatusCode)
+	}
+
+	// A speaker link's session is cut off by revoking, and told why.
+	tok := mint(t, srv, "open")
+	sid, code = start(tok)
+	if code != http.StatusOK {
+		t.Fatalf("speaker link start: %d", code)
+	}
+	post("/api/admin/rooms/open/stream/"+sid, tok, make([]byte, 3200))
+	do(t, nil, http.MethodPost, srv.URL+"/api/admin/rooms/open/publisher-tokens/revoke", adminTok, "")
+	waitFor(t, func() bool { return !liveStatus(t, srv, "open") })
+	time.Sleep(1100 * time.Millisecond)
+	tok2 := mint(t, srv, "open") // the old link is revoked: read the reason with a new one
+	r = post("/api/admin/rooms/open/stream/"+sid, tok2, make([]byte, 100))
+	json.NewDecoder(r.Body).Decode(&gone)
+	r.Body.Close()
+	if r.StatusCode != http.StatusGone || gone.Reason != "revoked" {
+		t.Errorf("after revoking: %d %q, want 410 revoked", r.StatusCode, gone.Reason)
 	}
 }

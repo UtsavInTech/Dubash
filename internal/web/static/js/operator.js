@@ -137,10 +137,26 @@ async function start() {
     query.set('token', token);
     sock = new WebSocket(`${url}?${query}`);
   }
-  ws = sock;
   sock.binaryType = 'arraybuffer';
+  sentBytes = 0;
+  attach(sock, isFile, () => {
+    // The WebSocket never opened: some hosts' gateways drop WebSockets
+    // (Zoho Catalyst does). Stream the same audio over plain HTTP.
+    query.delete('token');
+    const link = new HttpLink(`/api/admin/rooms/${encodeURIComponent(roomId)}/stream`, query, token);
+    attach(link, isFile, null);
+  });
+  if (isFile) player.onended = () => stop();
+}
+
+// attach makes link (a WebSocket, or an HttpLink with the same shape)
+// the console's connection. fallback runs if a WebSocket never opens.
+function attach(sock, isFile, fallback) {
+  ws = sock;
+  let opened = false;
   sock.onopen = () => {
     if (sock !== ws) return;
+    opened = true;
     setStatus('Live · Captions on', true);
     $('start').textContent = 'You’re live';
     $('stop').disabled = false;
@@ -150,6 +166,7 @@ async function start() {
   };
   sock.onclose = (e) => {
     if (sock !== ws) return;
+    if (!opened && fallback && e.code === 1006) return fallback();
     if (e.code === 1008) fail('Someone else is already live in this event.');
     else if (e.code === EVENT_ENDED) fail('The event was ended from the admin panel.');
     else if (e.code === REVOKED) fail('The organisers revoked this speaker link: ask them for a new one.');
@@ -158,7 +175,6 @@ async function start() {
     else if (e.code !== 1000) fail(`Recognition failed: ${e.reason || `code ${e.code}`}`);
     else stop();
   };
-  sentBytes = 0;
   node.port.onmessage = (e) => {
     if (sock !== ws || sock.readyState !== WebSocket.OPEN) return;
     sock.send(e.data);
@@ -170,7 +186,87 @@ async function start() {
     const rms = Math.sqrt(sum / pcm.length) / 32768;
     $('level').style.clipPath = `inset(0 ${100 - Math.min(100, rms * 300)}% 0 0)`;
   };
-  if (isFile) player.onended = () => stop();
+}
+
+// HttpLink streams audio over plain HTTP: a session, then about a quarter
+// second of PCM per request, in order. It has the few parts of the
+// WebSocket API the console uses (readyState, send, close, onopen,
+// onclose with the same close codes).
+class HttpLink {
+  constructor(base, query, token) {
+    this.readyState = 0;
+    this.base = base;
+    this.headers = token ? { 'X-Dubash-Token': token } : {};
+    this.parts = [];
+    this.size = 0;
+    this.fails = 0;
+    this.chain = Promise.resolve();
+    this.begin(query);
+  }
+  async begin(query) {
+    try {
+      const r = await fetch(`${this.base}?${query}`, { method: 'POST', headers: this.headers });
+      if (r.status === 409) return this.end(1008, 'room busy');
+      if (r.status === 401 || r.status === 403) return this.end(1006, '');
+      if (!r.ok) return this.end(4400, (await r.text()).trim() || `HTTP ${r.status}`);
+      this.url = `${this.base}/${(await r.json()).session}`;
+      if (this.readyState !== 0) return this.hangUp(); // stopped while connecting
+      this.readyState = 1;
+      this.timer = setInterval(() => this.flush(), 250);
+      this.onopen?.();
+    } catch {
+      this.end(1006, '');
+    }
+  }
+  send(data) {
+    if (this.readyState !== 1) return;
+    this.parts.push(new Uint8Array(data));
+    this.size += data.byteLength;
+  }
+  flush() {
+    if (!this.size) return;
+    const body = new Uint8Array(this.size);
+    let at = 0;
+    for (const p of this.parts) { body.set(p, at); at += p.length; }
+    this.parts = [];
+    this.size = 0;
+    this.chain = this.chain.then(() => this.post(body));
+  }
+  async post(body) {
+    if (this.readyState === 3) return;
+    try {
+      const r = await fetch(this.url, { method: 'POST', headers: { ...this.headers, 'Content-Type': 'application/octet-stream' }, body });
+      if (r.status === 410) {
+        const { reason = '' } = await r.json().catch(() => ({}));
+        const code = { ended: EVENT_ENDED, revoked: REVOKED, busy: 1008, stopped: 1000 }[reason] ?? 1011;
+        return this.end(code, reason.replace(/^error: /, ''));
+      }
+      if (!r.ok) throw new Error(String(r.status));
+      this.fails = 0;
+    } catch {
+      if (++this.fails >= 8) this.end(1006, 'connection lost');
+    }
+  }
+  hangUp() {
+    if (this.url) fetch(this.url, { method: 'DELETE', headers: this.headers }).catch(() => {});
+  }
+  close(code = 1000) {
+    if (this.readyState >= 2) return;
+    const wasOpen = this.readyState === 1;
+    this.readyState = 2;
+    clearInterval(this.timer);
+    if (wasOpen) {
+      this.flush();
+      this.chain = this.chain.then(() => this.hangUp());
+    }
+    this.end(code, '');
+  }
+  end(code, reason) {
+    if (this.readyState === 3) return;
+    this.readyState = 3;
+    clearInterval(this.timer);
+    setTimeout(() => this.onclose?.({ code, reason }), 0); // asynchronous, like a WebSocket
+  }
 }
 
 // Pause keeps the microphone connected but sends nothing to recognition:

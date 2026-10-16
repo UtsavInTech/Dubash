@@ -354,6 +354,44 @@ await sp.waitForFunction(() => document.getElementById('error').textContent.incl
   .catch(async () => check('revoking cuts the speaker console off, saying why', false, await sp.textContent('#error')));
 await spk.close();
 
+// A host whose gateway drops WebSockets (Zoho Catalyst): the console
+// streams over plain HTTP instead, and captions still reach readers.
+const noWS = await browser.newContext({ storageState: undefined });
+await noWS.addInitScript(() => {
+  window.WebSocket = class extends EventTarget {
+    constructor() { super(); this.readyState = 0; setTimeout(() => { this.readyState = 3; this.onerror?.(new Event('error')); this.onclose?.({ code: 1006, reason: '' }); }, 50); }
+    send() {}
+    close() {}
+  };
+  window.WebSocket.OPEN = 1; window.WebSocket.CLOSING = 2;
+});
+const hp = await noWS.newPage();
+hp.on('pageerror', (e) => errors.push(`http console: ${e.message}`));
+await sleep(1500); // speaker links are dated to the second: mint after the revocation above
+const httpLink = await (await get('/api/admin/rooms/hall-hi/publisher-tokens', {
+  method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: '{"hours": 1}',
+})).json();
+await hp.goto(`${BASE}/operator/hall-hi#token=${httpLink.token}`);
+await hp.selectOption('#source', 'file');
+await hp.click('a[data-sample="en"]');
+await hp.click('#start');
+await hp.waitForFunction(() => document.getElementById('status').classList.contains('live'), null, { timeout: 10000 })
+  .then(() => check('without WebSockets the console goes live over HTTP', true))
+  .catch(async () => check('without WebSockets the console goes live over HTTP', false, await hp.textContent('#error')));
+const httpLines = await (async () => {
+  for (let i = 0; i < 40; i++) {
+    const st = (await (await get('/api/admin/status', { headers: { Authorization: `Bearer ${TOKEN}` } })).json()).find((r) => r.id === 'hall-hi');
+    if (st?.segments > 0) return st.segments;
+    await sleep(250);
+  }
+  return 0;
+})();
+check('audio streamed over HTTP becomes captions', httpLines > 0, `${httpLines} lines`);
+await hp.click('#stop');
+await hp.waitForFunction(() => !document.getElementById('status').classList.contains('live'), null, { timeout: 8000 })
+  .then(() => check('HTTP console stops cleanly', true)).catch(() => check('HTTP console stops cleanly', false));
+await noWS.close();
+
 // Landing-page sample interactions do not open microphones or call providers.
 const welcome = await ctx.newPage();
 await welcome.goto(BASE);

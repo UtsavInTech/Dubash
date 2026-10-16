@@ -1,6 +1,8 @@
 """Run the existing static Go app in the AppSail Linux managed environment.
 
-This package is a temporary, fake-provider Development test. It has no API keys.
+With SARVAM_API_KEY set in the AppSail environment it runs live (real
+Sarvam recognition and translation); without it, scripted demo captions.
+The package itself never contains a key.
 AppSail scratch files are ephemeral; durable data needs a shared database before
 this package is used for persistent events.
 
@@ -73,11 +75,22 @@ def prepare():
         except OSError as e:
             log("could not copy events.yaml (%s): starting with rooms.yaml only" % e)
     os.environ["TRUST_PROXY"] = "on"
-    os.environ["CORRECTION"] = "rules"
     os.environ["DUBASH_TEMPORARY_DATA"] = "on"
-    # This Development artifact cannot contact paid speech providers, even if
-    # a key was inadvertently configured in the service environment.
-    for name in ("SARVAM_API_KEY", "SARVAM_PROBE", "GEMINI_API_KEY", "DATABASE_URL", "REDIS_URL", "NODE_URL", "ROOM_IDS"):
+    # Live with a Sarvam key (real recognition and translation, billed to
+    # that key); scripted demo captions without one, or with DUBASH_DEMO=on.
+    live = bool(os.environ.get("SARVAM_API_KEY")) and os.environ.get("DUBASH_DEMO", "") != "on"
+    if live:
+        os.environ.setdefault("ASR_PROVIDER", "sarvam")
+        log("live mode: Sarvam recognition and translation")
+    else:
+        os.environ["CORRECTION"] = "rules"
+        log("demo mode: scripted captions, no paid providers (set SARVAM_API_KEY to go live)")
+    # One server, no shared database here: drop multi-server settings, and
+    # in demo mode every provider key, so nothing paid is ever called.
+    drop = ["SARVAM_PROBE", "DATABASE_URL", "REDIS_URL", "NODE_URL", "ROOM_IDS"]
+    if not live:
+        drop += ["SARVAM_API_KEY", "GEMINI_API_KEY"]
+    for name in drop:
         os.environ.pop(name, None)
     binary = base / "dubash"
     if not binary.exists():
@@ -91,8 +104,8 @@ def prepare():
             shutil.copyfile(binary, copy)
             copy.chmod(stat.S_IRWXU)
             binary = copy
-    return [str(binary), "-fake", "-addr", "0.0.0.0:%d" % port,
-            "-config", str(base / "rooms.yaml"), "-data", str(data)], None
+    args = [str(binary)] + ([] if live else ["-fake"])
+    return args + ["-addr", "0.0.0.0:%d" % port, "-config", str(base / "rooms.yaml"), "-data", str(data)], None
 
 
 def main():
