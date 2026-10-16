@@ -173,11 +173,13 @@ function renderSamples() {
 }
 $("upload-form").onsubmit = (e) => {
   e.preventDefault();
+  // Kept now: e.currentTarget is null by the time the upload finishes.
+  const form = e.currentTarget;
   try {
     const id = pid(),
       file = $("sample-file").files[0];
     if (!file) throw new Error("Choose a sample file.");
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/admin/speakers/${id}/samples`);
     xhr.setRequestHeader("X-Dubash-Token", token());
@@ -198,7 +200,7 @@ $("upload-form").onsubmit = (e) => {
         $("upload-state").textContent = x.checks?.analysed
           ? `Checked: ${x.checks.message}${x.checks.clipping ? " · clipping detected" : ""}.`
           : "Accepted; audio checks were not analysed for this format.";
-        e.currentTarget.reset();
+        form.reset();
         await refresh();
       } catch (err) {
         fail(err);
