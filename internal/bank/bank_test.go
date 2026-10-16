@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func approved(scope Scope, id, term string, mod ...func(*Entry)) Entry {
@@ -148,7 +149,7 @@ func stores(t *testing.T, fn func(t *testing.T, s Store)) {
 			t.Fatal(err)
 		}
 		defer s.Close()
-		if _, err := s.db.Exec(ctx, `TRUNCATE vocabulary_entries, vocabulary_translations, event_context_pins, event_context_versions, transcript_corrections, audit_log RESTART IDENTITY CASCADE`); err != nil {
+		if _, err := s.db.Exec(ctx, `TRUNCATE vocabulary_entries, vocabulary_translations, event_context_pins, event_context_versions, transcript_corrections, audit_log, script_documents RESTART IDENTITY CASCADE`); err != nil {
 			t.Fatal(err)
 		}
 		fn(t, s)
@@ -334,4 +335,46 @@ func TestScriptSuggestions(t *testing.T) {
 	if slices.Contains(terms, "Dubash") || !slices.Contains(terms, "Sarvam AI") || !slices.Contains(terms, "भंडारा") {
 		t.Fatalf("suggestions %q", terms)
 	}
+}
+
+func TestPurgeCorrectionsContract(t *testing.T) {
+	stores(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		now := time.Now().UTC().Truncate(time.Second)
+		old := Correction{Event: "hall", Segment: 1, Raw: "राम कता", Corrected: "राम कथा", Lang: "hi", At: now.AddDate(0, 0, -40), By: "admin"}
+		recent := Correction{Event: "hall", Segment: 2, Raw: "हनुमन", Corrected: "हनुमान", Lang: "hi", At: now, By: "admin"}
+		other := Correction{Event: "other", Segment: 1, Raw: "a", Corrected: "b", At: now.AddDate(0, 0, -40)}
+		for _, c := range []Correction{old, recent, other} {
+			if _, err := s.SaveCorrection(ctx, c); err != nil {
+				t.Fatal(err)
+			}
+		}
+		n, err := s.PurgeCorrections(ctx, "hall", now.AddDate(0, 0, -30), "retention")
+		if err != nil || n != 1 {
+			t.Fatalf("purged %d, %v; want 1", n, err)
+		}
+		left, _ := s.Corrections(ctx, "hall")
+		if len(left) != 1 || left[0].Segment != 2 {
+			t.Fatalf("left %+v", left)
+		}
+		if o, _ := s.Corrections(ctx, "other"); len(o) != 1 {
+			t.Fatalf("another event's fixes went too: %+v", o)
+		}
+		// A new fix still gets an id of its own after a purge.
+		c, err := s.SaveCorrection(ctx, Correction{Event: "hall", Segment: 3, Raw: "x", Corrected: "y", At: now})
+		if err != nil || c.ID == left[0].ID {
+			t.Fatalf("id after purge: %+v %v", c, err)
+		}
+		audit, _ := s.Audit(ctx, 100)
+		var purged bool
+		for _, a := range audit {
+			if strings.Contains(a.Detail, "राम कता") {
+				t.Errorf("the audit log still holds purged text: %+v", a)
+			}
+			purged = purged || a.Action == "purge" && a.Object == "event:hall"
+		}
+		if !purged {
+			t.Error("the purge is not in the audit log")
+		}
+	})
 }

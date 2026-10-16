@@ -16,22 +16,85 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/UtsavInTech/dubash/internal/caption"
 )
 
-// Store writes segments under dir/{room}.jsonl.
+// Store writes segments under dir/{room}.jsonl. Transcripts are what
+// people said: the directory and files are readable by the server's user
+// only.
 type Store struct {
 	dir string
 	mu  sync.Mutex
+	off map[string]bool // rooms whose transcript is not kept
 }
 
 // New creates dir if needed.
 func New(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
-	return &Store{dir: dir}, nil
+	// Tighten a directory created by an older version.
+	os.Chmod(dir, 0o700)
+	return &Store{dir: dir, off: map[string]bool{}}, nil
+}
+
+// Disable stops keeping room's transcript (store_transcript: false):
+// Append drops its lines, and its captions live only in memory.
+func (s *Store) Disable(room string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.off[room] = true
+}
+
+// Delete removes room's transcript.
+func (s *Store) Delete(room string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(s.path(room)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("delete transcript: %w", err)
+	}
+	return nil
+}
+
+// Purge drops room's lines transcribed before cutoff, rewriting the file
+// atomically, and returns how many it dropped. Lines without a time
+// (written by old versions) are kept.
+func (s *Store) Purge(room string, cutoff time.Time) (int, error) {
+	segs, _, err := s.Load(room)
+	if err != nil || len(segs) == 0 {
+		return 0, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var keep bytes.Buffer
+	dropped := 0
+	for _, seg := range segs {
+		if !seg.At.IsZero() && seg.At.Before(cutoff) {
+			dropped++
+			continue
+		}
+		line, err := json.Marshal(seg)
+		if err != nil {
+			return 0, fmt.Errorf("encode segment: %w", err)
+		}
+		keep.Write(append(line, '\n'))
+	}
+	if dropped == 0 {
+		return 0, nil
+	}
+	if keep.Len() == 0 {
+		return dropped, os.Remove(s.path(room))
+	}
+	tmp := s.path(room) + ".tmp"
+	if err := os.WriteFile(tmp, keep.Bytes(), 0o600); err != nil {
+		return 0, fmt.Errorf("purge transcript: %w", err)
+	}
+	if err := os.Rename(tmp, s.path(room)); err != nil {
+		return 0, fmt.Errorf("purge transcript: %w", err)
+	}
+	return dropped, nil
 }
 
 func (s *Store) path(room string) string {
@@ -46,7 +109,10 @@ func (s *Store) Append(seg caption.Segment) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f, err := os.OpenFile(s.path(seg.Room), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if s.off[seg.Room] {
+		return nil
+	}
+	f, err := os.OpenFile(s.path(seg.Room), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open transcript: %w", err)
 	}
