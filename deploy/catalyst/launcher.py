@@ -10,6 +10,8 @@ When the app cannot start, the launcher itself answers on the port with the
 reason (never a secret), so the problem shows at the app's URL even without
 AppSail logs.
 """
+import hashlib
+import hmac
 import http.server
 import os
 from pathlib import Path
@@ -79,6 +81,10 @@ def prepare():
     # Live with a Sarvam key (real recognition and translation, billed to
     # that key); scripted demo captions without one, or with DUBASH_DEMO=on.
     live = bool(os.environ.get("SARVAM_API_KEY")) and os.environ.get("DUBASH_DEMO", "") != "on"
+    if live and not os.environ.get("TOKEN_SECRET"):
+        # A stable signing key, so organiser sign-ins and speaker links
+        # survive restarts: derived from the Sarvam key, never shown.
+        os.environ["TOKEN_SECRET"] = hmac.new(os.environ["SARVAM_API_KEY"].encode(), b"dubash token secret v1", hashlib.sha256).hexdigest()
     if live:
         os.environ.setdefault("ASR_PROVIDER", "sarvam")
         log("live mode: Sarvam recognition and translation")
