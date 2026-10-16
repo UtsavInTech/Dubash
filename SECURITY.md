@@ -16,13 +16,19 @@ Security fixes land on the `main` branch.
 
 ## Deployment notes
 
-- Always set `ADMIN_TOKEN` on a server reachable from the Internet: it
-  guards audio ingest, the operator console's stream, the production panel
-  and the metrics. Docker Compose refuses to start without it.
-- Serve Dubash over https (a reverse proxy or a tunnel). The token
-  travels in the operator's WebSocket URL, and browsers only allow
-  microphone capture on secure origins anyway.
-- `GEMINI_API_KEY` and the model servers' keys stay on the server; the
-  pages never see them. Error messages shown to the operator are stripped of
-  URLs, which may carry credentials.
-- Audience pages and transcript exports are public by design.
+See [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) for the review
+behind these, and [docs/RUNBOOK.md](docs/RUNBOOK.md) for running an event.
+
+- Set a strong `ADMIN_TOKEN` (`openssl rand -base64 24`). The server
+  listens on 127.0.0.1 by default and refuses to listen on other addresses
+  with an empty or weak token (`-insecure` overrides, never for an event).
+- Give speakers a **speaker link** from the panel instead of the admin
+  token: one event, a few hours, revocable at once.
+- Serve Dubash over https (a reverse proxy or a tunnel); set
+  `TRUST_PROXY=on` only behind a proxy that sets `X-Forwarded-For`, and
+  let it pass the `Sec-WebSocket-Protocol` header.
+- Provider keys stay on the server; the pages never see them. Error
+  messages shown to the operator are stripped of URLs.
+- Audience pages are public unless the event sets `audience_pin`;
+  `exports` decides who may download transcripts; `retention_days` and
+  `store_transcript` decide what is kept.

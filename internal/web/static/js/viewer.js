@@ -21,6 +21,7 @@ const UI = {
     live: 'En vivo', offline: 'Sin transmisión', download: 'Descargar la transcripción', 'this-talk': 'Esta charla', 'whole-room': 'Toda la sala', notfound: 'No encontramos esa sala.', listen: 'Escuchar',
   },
   en: {
+    'pin-title': 'This event asks for a PIN', 'pin-hint': 'The organisers show it in the hall. Scanning the QR code there works too.', pin: 'PIN', enter: 'Open the captions', 'pin-wrong': 'That PIN is not right.', 'pin-wait': 'Too many tries: wait a few minutes.',
     back: '‹ Events', language: 'Language', settings: 'Reading settings', 'settings-short': 'Settings', captions: 'Captions',
     'waiting-title': 'No captions yet', waiting: 'They will show up here as soon as the speaker starts.',
     scan: 'Scan to read in your language', follow: '↓ Jump to latest', close: 'Close', size: 'Text size',
@@ -35,6 +36,7 @@ const UI = {
     welcome: 'Welcome to {title}', speaker: 'Speaker: {name}', translating: 'translating…', reconnecting: 'Reconnecting…',
   },
   hi: {
+    'pin-title': 'इस कार्यक्रम के लिए PIN चाहिए', 'pin-hint': 'आयोजक इसे हॉल में दिखाते हैं। वहाँ का QR कोड स्कैन करने से भी खुल जाएगा।', pin: 'PIN', enter: 'कैप्शन खोलें', 'pin-wrong': 'यह PIN सही नहीं है।', 'pin-wait': 'बहुत बार कोशिश हुई: कुछ मिनट रुकें।',
     back: '‹ कार्यक्रम', language: 'भाषा', settings: 'पढ़ने की सेटिंग', 'settings-short': 'सेटिंग', captions: 'कैप्शन',
     'waiting-title': 'अभी कोई कैप्शन नहीं', waiting: 'वक्ता के बोलना शुरू करते ही यहाँ दिखेंगे।',
     scan: 'अपनी भाषा में पढ़ने के लिए स्कैन करें', follow: '↓ सबसे नए पर जाएँ', close: 'बंद करें', size: 'अक्षरों का आकार',
@@ -49,6 +51,7 @@ const UI = {
     welcome: '{title} में आपका स्वागत है', speaker: 'वक्ता: {name}', translating: 'अनुवाद हो रहा है…', reconnecting: 'फिर से जुड़ रहे हैं…',
   },
   te: {
+    'pin-title': 'ఈ కార్యక్రమానికి PIN అవసరం', 'pin-hint': 'నిర్వాహకులు దీన్ని హాల్‌లో చూపిస్తారు. అక్కడి QR కోడ్ స్కాన్ చేసినా తెరుచుకుంటుంది.', pin: 'PIN', enter: 'క్యాప్షన్లు తెరవండి', 'pin-wrong': 'ఈ PIN సరైనది కాదు.', 'pin-wait': 'చాలా ప్రయత్నాలు: కొన్ని నిమిషాలు ఆగండి.',
     back: '‹ కార్యక్రమాలు', language: 'భాష', settings: 'చదివే సెట్టింగ్‌లు', 'settings-short': 'సెట్టింగ్‌లు', captions: 'క్యాప్షన్‌లు',
     'waiting-title': 'ఇంకా క్యాప్షన్‌లు లేవు', waiting: 'వక్త మాట్లాడటం మొదలుపెట్టగానే ఇక్కడ కనిపిస్తాయి.',
     scan: 'మీ భాషలో చదవడానికి స్కాన్ చేయండి', follow: '↓ తాజాదానికి వెళ్ళండి', close: 'మూసివేయండి', size: 'అక్షరాల పరిమాణం',
@@ -63,6 +66,7 @@ const UI = {
     welcome: '{title}కు స్వాగతం', speaker: 'వక్త: {name}', translating: 'అనువదిస్తోంది…', reconnecting: 'మళ్ళీ కనెక్ట్ అవుతోంది…',
   },
   kn: {
+    'pin-title': 'ಈ ಕಾರ್ಯಕ್ರಮಕ್ಕೆ PIN ಬೇಕು', 'pin-hint': 'ಆಯೋಜಕರು ಇದನ್ನು ಸಭಾಂಗಣದಲ್ಲಿ ತೋರಿಸುತ್ತಾರೆ. ಅಲ್ಲಿನ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿದರೂ ತೆರೆಯುತ್ತದೆ.', pin: 'PIN', enter: 'ಶೀರ್ಷಿಕೆಗಳನ್ನು ತೆರೆಯಿರಿ', 'pin-wrong': 'ಈ PIN ಸರಿಯಿಲ್ಲ.', 'pin-wait': 'ತುಂಬಾ ಪ್ರಯತ್ನಗಳು: ಕೆಲವು ನಿಮಿಷ ಕಾಯಿರಿ.',
     back: '‹ ಕಾರ್ಯಕ್ರಮಗಳು', language: 'ಭಾಷೆ', settings: 'ಓದುವ ಸೆಟ್ಟಿಂಗ್‌ಗಳು', 'settings-short': 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು', captions: 'ಶೀರ್ಷಿಕೆಗಳು',
     'waiting-title': 'ಇನ್ನೂ ಶೀರ್ಷಿಕೆಗಳಿಲ್ಲ', waiting: 'ಭಾಷಣಕಾರರು ಮಾತನಾಡಲು ಆರಂಭಿಸಿದ ತಕ್ಷಣ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.',
     scan: 'ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಓದಲು ಸ್ಕ್ಯಾನ್ ಮಾಡಿ', follow: '↓ ಇತ್ತೀಚಿನದಕ್ಕೆ ಹೋಗಿ', close: 'ಮುಚ್ಚಿ', size: 'ಅಕ್ಷರದ ಗಾತ್ರ',
@@ -77,6 +81,7 @@ const UI = {
     welcome: '{title}ಗೆ ಸ್ವಾಗತ', speaker: 'ಭಾಷಣಕಾರರು: {name}', translating: 'ಅನುವಾದಿಸಲಾಗುತ್ತಿದೆ…', reconnecting: 'ಮರುಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…',
   },
   ta: {
+    'pin-title': 'இந்த நிகழ்ச்சிக்கு PIN தேவை', 'pin-hint': 'ஏற்பாட்டாளர்கள் இதை அரங்கில் காட்டுவார்கள். அங்குள்ள QR குறியீட்டை ஸ்கேன் செய்தாலும் திறக்கும்.', pin: 'PIN', enter: 'தலைப்புகளைத் திறக்கவும்', 'pin-wrong': 'இந்த PIN சரியில்லை.', 'pin-wait': 'பல முயற்சிகள்: சில நிமிடங்கள் காத்திருங்கள்.',
     back: '‹ நிகழ்ச்சிகள்', language: 'மொழி', settings: 'வாசிப்பு அமைப்புகள்', 'settings-short': 'அமைப்புகள்', captions: 'வசனங்கள்',
     'waiting-title': 'இன்னும் வசனங்கள் இல்லை', waiting: 'பேச்சாளர் பேசத் தொடங்கியதும் இங்கே தோன்றும்.',
     scan: 'உங்கள் மொழியில் படிக்க ஸ்கேன் செய்யுங்கள்', follow: '↓ சமீபத்தியதற்குச் செல்லவும்', close: 'மூடு', size: 'எழுத்து அளவு',
@@ -160,6 +165,7 @@ let interim = '';
 let live = false;
 let state = { paused: false, ended: false };
 let talk = { n: 0, title: '' }; // the room's current talk, from its status
+let canExport = true; // the event's exports policy lets this reader download
 let events; // the EventSource, reopened when the reader changes language
 // A line whose translation has not come after this long is shown as not
 // translated instead of "translating…".
@@ -355,6 +361,8 @@ function renderLangs() {
 }
 
 function renderExports() {
+  document.querySelector('.downloads').hidden = !canExport;
+  if (!canExport) return;
   const names = { vtt: 'VTT (web subtitles)', srt: 'SRT (video subtitles)', txt: 'TXT (plain text)' };
   const group = (label, query) => {
     const links = ['txt', 'srt', 'vtt'].map((f) => {
@@ -424,6 +432,16 @@ async function main() {
   lang = pickLang([room.source, ...room.targets]);
   document.title = `${room.title} · Dubash`;
   $('title').textContent = room.title;
+  translatePage();
+  // An event with a PIN opens after it (or after scanning the hall's QR
+  // code, which sets the same pass).
+  const access = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/access`)
+    .then((r) => r.json()).catch(() => ({ allowed: true, exports: true }));
+  canExport = access.exports;
+  if (!access.allowed) {
+    await askPIN();
+    canExport = (await (await fetch(`/api/rooms/${encodeURIComponent(roomId)}/access`)).json()).exports;
+  }
   wirePrefs();
   wireFollow();
   wireListen();
@@ -435,6 +453,56 @@ async function main() {
   connect();
   // Pending lines turn into "not translated" when their time is up.
   setInterval(() => { if ([...segments.values()].some((s) => s.live)) renderLines(); }, 5000);
+}
+
+// askPIN shows the PIN form and resolves once the server accepts a PIN.
+function askPIN() {
+  return new Promise((resolve) => {
+    const form = document.createElement('form');
+    form.className = 'pin-form';
+    const h = document.createElement('h2');
+    h.textContent = t('pin-title');
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = t('pin-hint');
+    const label = document.createElement('label');
+    label.className = 'field';
+    const span = document.createElement('span');
+    span.textContent = t('pin');
+    const input = document.createElement('input');
+    Object.assign(input, { name: 'pin', inputMode: 'numeric', autocomplete: 'off', required: true, maxLength: 12, pattern: '[0-9]*' });
+    label.append(span, input);
+    const button = document.createElement('button');
+    button.className = 'button';
+    button.type = 'submit';
+    button.textContent = t('enter');
+    const error = document.createElement('p');
+    error.className = 'error';
+    error.setAttribute('role', 'alert');
+    form.append(h, hint, label, button, error);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      button.disabled = true;
+      try {
+        const res = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/unlock`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: input.value.trim() }),
+        });
+        if (res.ok) {
+          $('lines').replaceChildren();
+          resolve();
+          return;
+        }
+        error.textContent = t(res.status === 429 ? 'pin-wait' : 'pin-wrong');
+      } catch (err) {
+        error.textContent = err.message;
+      }
+      button.disabled = false;
+      input.select();
+    };
+    $('empty').hidden = true;
+    $('lines').replaceChildren(form);
+    input.focus();
+  });
 }
 
 // connect opens the caption stream for the reader's language. On a dropped

@@ -113,7 +113,7 @@ func TestStreamWaitsForABusyRoom(t *testing.T) {
 func TestStreamExplainsARefusedConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	_, err := session(ctx, "ws://127.0.0.1:1/ingest/sala-a", make(chan []byte), slog.New(slog.DiscardHandler))
+	_, err := session(ctx, "ws://127.0.0.1:1/ingest/sala-a", "", make(chan []byte), slog.New(slog.DiscardHandler))
 	if err == nil || !strings.Contains(err.Error(), "is the Dubash server running?") {
 		t.Fatalf("err = %v", err)
 	}
@@ -121,9 +121,9 @@ func TestStreamExplainsARefusedConnection(t *testing.T) {
 
 func TestEndpoint(t *testing.T) {
 	for in, want := range map[string]string{
-		"http://localhost:8080":     "ws://localhost:8080/ingest/sala-a?token=t%26k",
-		"https://subs.example.org/": "wss://subs.example.org/ingest/sala-a?token=t%26k",
-		"https://example.org/subs":  "wss://example.org/subs/ingest/sala-a?token=t%26k",
+		"http://localhost:8080":     "ws://localhost:8080/ingest/sala-a",
+		"https://subs.example.org/": "wss://subs.example.org/ingest/sala-a",
+		"https://example.org/subs":  "wss://example.org/subs/ingest/sala-a",
 	} {
 		got, err := Options{Server: in, Room: "sala-a", Token: "t&k"}.Endpoint()
 		if err != nil || got != want {

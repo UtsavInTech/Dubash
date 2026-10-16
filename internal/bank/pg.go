@@ -406,6 +406,43 @@ func (s *PGStore) SaveCorrection(ctx context.Context, c Correction) (Correction,
 	return c, tx.Commit(ctx)
 }
 
+// PurgeCorrections implements Store.
+func (s *PGStore) PurgeCorrections(ctx context.Context, event string, cutoff time.Time, actor string) (int, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("bank: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `DELETE FROM transcript_corrections WHERE event_id = $1 AND at < $2 RETURNING segment_id`, event, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("bank: %w", err)
+	}
+	var objects []string
+	for rows.Next() {
+		var seg int
+		if err := rows.Scan(&seg); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("bank: %w", err)
+		}
+		objects = append(objects, fmt.Sprintf("event:%s segment:%d", event, seg))
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("bank: %w", err)
+	}
+	if len(objects) == 0 {
+		return 0, nil
+	}
+	if _, err := tx.Exec(ctx, `UPDATE audit_log SET detail = $1 WHERE action = 'correct' AND object = ANY($2)`,
+		purgedDetail, objects); err != nil {
+		return 0, fmt.Errorf("bank: %w", err)
+	}
+	if err := s.audit(ctx, tx, actor, "purge", "event:"+event, fmt.Sprintf("%d live fixes before %s", len(objects), cutoff.UTC().Format(time.RFC3339))); err != nil {
+		return 0, err
+	}
+	return len(objects), tx.Commit(ctx)
+}
+
 // Corrections implements Store.
 func (s *PGStore) Corrections(ctx context.Context, event string) ([]Correction, error) {
 	rows, err := s.db.Query(ctx, `SELECT id, event_id, segment_id, rev, raw, corrected, lang, at, by, suggested

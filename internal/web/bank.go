@@ -42,7 +42,8 @@ func (s *Server) bankRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/events/{room}/context", s.auth(s.withBank(s.eventContext)))
 	mux.HandleFunc("POST /api/admin/events/{room}/context", s.auth(s.withBank(s.publishContext)))
 	mux.HandleFunc("POST /api/admin/events/{room}/context/{id}/pin", s.auth(s.withBank(s.pinContext)))
-	mux.HandleFunc("POST /api/admin/rooms/{room}/segments/{id}/correct", s.auth(s.correct))
+	// The speaker's console fixes words live, with its speaker link.
+	mux.HandleFunc("POST /api/admin/rooms/{room}/segments/{id}/correct", s.publisher(s.correct))
 	s.scriptRoutes(mux)
 }
 
@@ -557,6 +558,13 @@ func (s *Server) rehearse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the event does not serve that language", http.StatusBadRequest)
 		return
 	}
+	// A rehearsal is billed twice: one at a time per event, so a double
+	// click or a leaked token cannot run many at once.
+	if _, busy := s.rehearsing.LoadOrStore(rm.Config().ID, struct{}{}); busy {
+		http.Error(w, "a rehearsal of this event is already running", http.StatusTooManyRequests)
+		return
+	}
+	defer s.rehearsing.Delete(rm.Config().ID)
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 	defer cancel()
 	rep, err := rehearse.Run(ctx, rm, pcm, lang, r.FormValue("reference"))

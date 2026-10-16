@@ -15,4 +15,4 @@ COPY --from=build --chown=65532:65532 /out/data /data
 COPY rooms.yaml /app/rooms.yaml
 COPY samples/*.wav /app/samples/
 EXPOSE 8080
-ENTRYPOINT ["/app/dubash", "-config", "/app/rooms.yaml", "-data", "/data"]
+ENTRYPOINT ["/app/dubash", "-addr", ":8080", "-config", "/app/rooms.yaml", "-data", "/data"]

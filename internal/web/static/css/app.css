@@ -314,3 +314,7 @@ input.fix { width: 100%; font: inherit; padding: 4px 6px; border: 2px solid var(
 .script-card h3 { margin: 0; }
 .script-card .preview { color: var(--text-2); font-size: .95rem; }
 .field.wide { flex: 1 1 100%; }
+
+/* The PIN asked by an event that has one. */
+.pin-form { display: grid; gap: 0.75rem; max-width: 22rem; margin: 2rem auto; }
+.pin-form input { font-size: 1.5rem; letter-spacing: 0.2em; }

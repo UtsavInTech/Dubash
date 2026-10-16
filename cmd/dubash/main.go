@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,22 +34,23 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "listen address")
+	addr := flag.String("addr", "127.0.0.1:8080", "listen address (:8080 for phones on the network: needs a strong ADMIN_TOKEN)")
 	rooms := flag.String("config", "rooms.yaml", "rooms file")
 	data := flag.String("data", "data", "directory for transcripts")
 	fake := flag.Bool("fake", false, "use scripted transcription and translation (no API key needed)")
+	insecure := flag.Bool("insecure", false, "start on a public address with an empty or weak ADMIN_TOKEN (never for an event)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx, log, *addr, *rooms, *data, *fake); err != nil {
+	if err := run(ctx, log, *addr, *rooms, *data, *fake, *insecure); err != nil {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string, fake bool) error {
+func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string, fake, insecure bool) error {
 	var cfg config.Config
 	var err error
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -64,6 +67,7 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 	if err != nil {
 		return err
 	}
+	catalog := cfg.Rooms // every event, for QR join codes
 	var coordinator *cluster.Coordinator
 	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
 		if databaseURL == "" {
@@ -74,7 +78,7 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 			return err
 		}
 		defer coordinator.Close()
-		cfg.Rooms = coordinator.Owned
+		cfg.Rooms = coordinator.Owned // this server runs only its shard
 	} else if os.Getenv("ROOM_IDS") != "" || os.Getenv("NODE_URL") != "" {
 		return errors.New("ROOM_IDS and NODE_URL require REDIS_URL")
 	}
@@ -95,8 +99,18 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 	}
 
 	token := os.Getenv("ADMIN_TOKEN")
-	if token == "" {
-		log.Warn("ADMIN_TOKEN is not set: anyone can stream audio and see the admin panel")
+	if err := checkToken(token, os.Getenv("TOKEN_SECRET"), os.Getenv("PUBLIC_URL"), addr); err != nil {
+		if !insecure {
+			return err
+		}
+		log.Warn("starting anyway (-insecure)", "problem", err)
+	} else if token == "" || weakToken(token) {
+		log.Warn("ADMIN_TOKEN is empty or weak: fine on this computer, never on a public address")
+	}
+	for _, rc := range cfg.Rooms {
+		if !rc.Stores() {
+			st.Disable(rc.ID)
+		}
 	}
 
 	corrMeter := &translate.Meter{}
@@ -116,6 +130,15 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 
 	site := web.New(rs, st, token, log)
 	site.PublicURL = os.Getenv("PUBLIC_URL")
+	site.Catalog = catalog
+	site.UseState(dataDir, os.Getenv("TOKEN_SECRET"))
+	site.TrustProxy = os.Getenv("TRUST_PROXY") == "on"
+	if v, err := strconv.Atoi(os.Getenv("MAX_VIEWERS")); err == nil {
+		site.MaxViewers = v
+	}
+	if v, err := strconv.Atoi(os.Getenv("MAX_VIEWERS_PER_IP")); err == nil {
+		site.MaxViewersPerIP = v
+	}
 	site.Meter, site.CorrectionMeter = meter, corrMeter
 	if !fake {
 		site.Prices = web.SarvamPrices
@@ -136,6 +159,7 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 			rm.SetVersion(v)
 		}
 	}
+	go site.Retain(ctx)
 	local := site.Handler()
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/readyz" {
@@ -379,4 +403,49 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 		}
 	}
 	return engine, translator, meter, nil
+}
+
+// minToken is the shortest ADMIN_TOKEN (and TOKEN_SECRET) accepted on a
+// public address: `openssl rand -base64 24` gives 32 characters.
+const minToken = 20
+
+func weakToken(t string) bool {
+	return len(t) < minToken || slices.Contains([]string{"change-me", "un-secreto", "secreto", "secret", "admin", "password"}, t)
+}
+
+// checkToken refuses an empty or weak admin token on a server others can
+// reach: one listening beyond this computer, or with a public URL.
+func checkToken(token, secret, publicURL, addr string) error {
+	if !public(publicURL, addr) {
+		return nil
+	}
+	switch {
+	case token == "":
+		return errors.New("ADMIN_TOKEN is not set: anyone could stream audio and run the admin panel (set one, e.g. `openssl rand -base64 24`, or listen on this computer only: -addr 127.0.0.1:8080)")
+	case weakToken(token):
+		return fmt.Errorf("ADMIN_TOKEN is too weak: use at least %d random characters, e.g. `openssl rand -base64 24`", minToken)
+	case secret != "" && len(secret) < minToken:
+		return fmt.Errorf("TOKEN_SECRET must be at least %d random characters", minToken)
+	}
+	return nil
+}
+
+// public reports whether the server can be reached from other machines.
+func public(publicURL, addr string) bool {
+	if u, err := url.Parse(publicURL); err == nil && u.Hostname() != "" && !loopback(u.Hostname()) {
+		return true
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return true
+	}
+	return !loopback(host)
+}
+
+func loopback(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

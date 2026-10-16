@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/UtsavInTech/dubash/internal/caption"
 )
@@ -58,5 +59,66 @@ func TestLoadSkipsCorruptLines(t *testing.T) {
 	}
 	if len(got) != 2 || got[0].Text != "Hello." || got[1].Text != "Bye." {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestTranscriptsArePrivate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "data")
+	s, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Append(caption.Segment{ID: 1, Room: "hall", Text: "नमस्ते"}); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]os.FileMode{dir: 0o700, filepath.Join(dir, "hall.jsonl"): 0o600} {
+		fi, err := os.Stat(path)
+		if err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: mode %v, %v; want %v", path, fi.Mode().Perm(), err, want)
+		}
+	}
+}
+
+func TestDisableDeleteAndPurge(t *testing.T) {
+	s, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	s.Disable("secret")
+	s.Append(caption.Segment{ID: 1, Room: "secret", Text: "off the record"})
+	if segs, _, _ := s.Load("secret"); len(segs) != 0 {
+		t.Fatalf("a room that keeps no transcript stored %+v", segs)
+	}
+
+	for _, seg := range []caption.Segment{
+		{ID: 1, Room: "hall", Text: "old", At: now.AddDate(0, 0, -10)},
+		{ID: 2, Room: "hall", Text: "no time"},
+		{ID: 3, Room: "hall", Text: "new", At: now},
+		{ID: 1, Room: "hall", Rev: 1, Text: "old, corrected", At: now.AddDate(0, 0, -10)},
+	} {
+		if err := s.Append(seg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := s.Purge("hall", now.AddDate(0, 0, -7))
+	if err != nil || n != 1 {
+		t.Fatalf("purged %d, %v; want 1", n, err)
+	}
+	segs, _, _ := s.Load("hall")
+	if len(segs) != 2 || segs[0].Text != "no time" || segs[1].Text != "new" {
+		t.Fatalf("after purge: %+v", segs)
+	}
+	if n, _ := s.Purge("hall", now.AddDate(0, 0, -7)); n != 0 {
+		t.Errorf("second purge dropped %d", n)
+	}
+	if err := s.Delete("hall"); err != nil {
+		t.Fatal(err)
+	}
+	if segs, _, _ := s.Load("hall"); segs != nil {
+		t.Fatalf("after delete: %+v", segs)
+	}
+	if err := s.Delete("hall"); err != nil {
+		t.Errorf("deleting twice: %v", err)
 	}
 }

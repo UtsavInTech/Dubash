@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -33,6 +34,42 @@ type Room struct {
 	// reads them (for the transcript export). Others are translated only
 	// while someone reads them.
 	AlwaysTranslate []string `yaml:"always_translate" json:"-"`
+
+	// Access and privacy (phase 5).
+	//
+	// AudiencePIN, when set, is asked of readers before they see the
+	// captions, history or transcript (4 to 12 digits).
+	AudiencePIN string `yaml:"audience_pin" json:"-"`
+	// Exports says who may download the transcript: readers (anyone who
+	// can read the captions; the default), admin, or off.
+	Exports string `yaml:"exports" json:"-"`
+	// JoinRevision is part of the room's QR join code (/j/{code}): change
+	// it to make printed codes stop working.
+	JoinRevision int `yaml:"join_revision" json:"-"`
+	// StoreTranscript, when false, keeps nothing on disk: lines are only
+	// relayed live (and replayed from memory to late readers).
+	StoreTranscript *bool `yaml:"store_transcript" json:"-"`
+	// RetentionDays deletes stored lines older than this many days; 0
+	// keeps them until deleted from the admin panel.
+	RetentionDays int `yaml:"retention_days" json:"-"`
+}
+
+// Stores reports whether the room keeps its transcript on disk.
+func (r Room) Stores() bool { return r.StoreTranscript == nil || *r.StoreTranscript }
+
+// Export policies.
+const (
+	ExportReaders = "readers"
+	ExportAdmin   = "admin"
+	ExportOff     = "off"
+)
+
+// ExportPolicy is Exports with its default.
+func (r Room) ExportPolicy() string {
+	if r.Exports == "" {
+		return ExportReaders
+	}
+	return r.Exports
 }
 
 // Languages are every language the room serves, spoken or translated:
@@ -92,6 +129,15 @@ func Parse(data []byte) (Config, error) {
 			if !slices.Contains(r.Languages(), l) {
 				return Config{}, fmt.Errorf("room %q: always_translate %q is not one of its languages", r.ID, l)
 			}
+		}
+		if p := r.AudiencePIN; p != "" && (len(p) < 4 || len(p) > 12 || strings.Trim(p, "0123456789") != "") {
+			return Config{}, fmt.Errorf("room %q: audience_pin must be 4 to 12 digits", r.ID)
+		}
+		if !slices.Contains([]string{"", ExportReaders, ExportAdmin, ExportOff}, r.Exports) {
+			return Config{}, fmt.Errorf("room %q: exports must be readers, admin or off", r.ID)
+		}
+		if r.RetentionDays < 0 {
+			return Config{}, fmt.Errorf("room %q: retention_days must not be negative", r.ID)
 		}
 		if len(r.Glossary) > maxGlossary {
 			return Config{}, fmt.Errorf("room %q: glossary has %d terms, at most %d are allowed", r.ID, len(r.Glossary), maxGlossary)

@@ -7,15 +7,28 @@ const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
 // The console's own close code when the event was ended from the panel.
 const EVENT_ENDED = 4001;
+const REVOKED = 4003;
 let languages = [];
 
+// A speaker link carries its token in the URL fragment (#token=…), which
+// the browser never sends to a server; the page takes it and removes it
+// from the address bar. A speaker link is kept per event, apart from the
+// organiser's admin token.
+const SPEAKER = 'p1.';
+const consoleKey = `dubash.console.${roomId}`;
 function storedToken() {
-  try { return localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
+  try { return localStorage.getItem(consoleKey) ?? localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
 }
 function storeToken(t) {
-  try { localStorage.setItem('dubash.token', t); } catch { /* private mode */ }
+  try { localStorage.setItem(t.startsWith(SPEAKER) ? consoleKey : 'dubash.token', t); } catch { /* private mode */ }
 }
-$('token').value = params.get('token') ?? storedToken();
+const linked = new URLSearchParams(location.hash.slice(1)).get('token') ?? params.get('token');
+if (linked) {
+  storeToken(linked);
+  params.delete('token');
+  history.replaceState(null, '', location.pathname + (params.size ? `?${params}` : ''));
+}
+$('token').value = linked ?? storedToken();
 
 let ctx, node, ws, stream, player, sentBytes = 0;
 
@@ -100,9 +113,19 @@ async function start() {
   // A local reference so a socket superseded by stop() (still CONNECTING
   // when Detener is clicked) can tell its own handlers are stale, instead
   // of racing the module-level `ws` that stop() has already cleared.
-  const query = new URLSearchParams({ token, lang: $('spoken').value });
+  const query = new URLSearchParams({ lang: $('spoken').value });
   if ($('talk').value.trim()) query.set('talk', $('talk').value.trim());
-  const sock = new WebSocket(`${proto}://${location.host}/ingest/${encodeURIComponent(roomId)}?${query}`);
+  // Browsers cannot set headers on a WebSocket: the token travels as a
+  // subprotocol, never in the URL. A token with characters a subprotocol
+  // cannot hold falls back to the query.
+  const url = `${proto}://${location.host}/ingest/${encodeURIComponent(roomId)}`;
+  let sock;
+  try {
+    sock = new WebSocket(`${url}?${query}`, token ? ['dubash', `dubash-token.${token}`] : ['dubash']);
+  } catch {
+    query.set('token', token);
+    sock = new WebSocket(`${url}?${query}`);
+  }
   ws = sock;
   sock.binaryType = 'arraybuffer';
   sock.onopen = () => {
@@ -117,6 +140,7 @@ async function start() {
     if (sock !== ws) return;
     if (e.code === 1008) fail('Someone else is already live in this event.');
     else if (e.code === EVENT_ENDED) fail('The event was ended from the admin panel.');
+    else if (e.code === REVOKED) fail('The organisers revoked this speaker link: ask them for a new one.');
     else if (e.code === 1006 && sentBytes === 0) fail('Could not connect: check the token, or whether the event is already live.');
     else if (e.code === 1006) fail('The connection to the server was lost.');
     else if (e.code !== 1000) fail(`Recognition failed: ${e.reason || `code ${e.code}`}`);
@@ -151,7 +175,7 @@ async function control(action) {
   const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomId)}/${action}`, {
     method: 'POST', headers: { Authorization: `Bearer ${$('token').value.trim()}` },
   });
-  if (!res.ok) throw new Error(res.status === 401 ? 'The admin token was rejected.' : `${action} failed: ${res.status}`);
+  if (!res.ok) throw new Error(res.status === 401 ? 'The token was rejected (expired or revoked?).' : `${action} failed: ${res.status}`);
   setPaused((await res.json()).paused);
 }
 

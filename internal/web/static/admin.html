@@ -33,10 +33,18 @@
         <input id="token" type="password" autocomplete="off"></label>
       <span class="row">
         <a class="button secondary" href="/posters" target="_blank">QR posters</a>
-        <a class="button secondary" id="metrics" href="/metrics" target="_blank">Metrics (Prometheus)</a>
+        <button class="button secondary" id="metrics" type="button">Metrics (Prometheus)</button>
       </span>
     </div>
     <p id="error" class="error" role="alert"></p>
+    <section id="speaker" class="speaker-link" hidden aria-live="polite">
+      <h2 id="speaker-title">Speaker link</h2>
+      <p class="hint">Send this link to the speaker (or open it on the console laptop). It opens the console for this event only: it cannot see other events, the bank or the costs. It expires on its own, and "Revoke links" ends it at once.</p>
+      <div class="row">
+        <label class="field wide"><span>Link</span><input id="speaker-url" readonly></label>
+        <span class="row"><button class="button" id="speaker-copy" type="button">Copy</button> <button class="button secondary" id="speaker-hide" type="button">Hide</button></span>
+      </div>
+    </section>
     <div class="table-wrap">
       <table>
         <caption>Events</caption>

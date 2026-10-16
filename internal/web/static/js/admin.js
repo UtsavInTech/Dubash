@@ -6,7 +6,60 @@ const params = new URLSearchParams(location.search);
 function storedToken() {
   try { return localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
 }
+// An old bookmark may carry ?token=: take it and drop it from the address
+// bar (a URL ends up in history and logs).
 $('token').value = params.get('token') ?? storedToken();
+if (params.has('token')) {
+  try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ }
+  history.replaceState(null, '', location.pathname);
+}
+const auth = () => ({ Authorization: `Bearer ${$('token').value.trim()}` });
+
+// download fetches a file with the token, so the link itself needs none.
+async function download(path, open = false) {
+  const res = await fetch(path, { headers: auth() });
+  if (!res.ok) throw new Error(`${path}: ${(await res.text()).trim() || res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  if (open) window.open(url, '_blank', 'noopener');
+  else {
+    const a = el('a', { href: url, download: (res.headers.get('Content-Disposition') ?? '').match(/filename="([^"]+)"/)?.[1] ?? '' });
+    a.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+$('metrics').onclick = () => download('/metrics', true).catch((e) => { $('error').textContent = e.message; });
+
+// speakerLink mints a console link for one event.
+async function speakerLink(s) {
+  const hours = prompt(`Speaker link for ${s.title}: valid for how many hours (at most 72)?`, '12');
+  if (hours === null) return;
+  const res = await fetch(`/api/admin/rooms/${s.id}/publisher-tokens`, {
+    method: 'POST', headers: { ...auth(), 'Content-Type': 'application/json' }, body: JSON.stringify({ hours: Number(hours) }),
+  });
+  if (!res.ok) throw new Error(`Could not make the link: ${(await res.text()).trim()}`);
+  const out = await res.json();
+  $('speaker-title').textContent = `Speaker link: ${s.title} (until ${new Date(out.expires).toLocaleString()})`;
+  $('speaker-url').value = out.console;
+  $('speaker').hidden = false;
+  $('speaker-url').select();
+}
+$('speaker-copy').onclick = () => navigator.clipboard.writeText($('speaker-url').value).catch(() => $('speaker-url').select());
+$('speaker-hide').onclick = () => { $('speaker').hidden = true; $('speaker-url').value = ''; };
+
+async function revokeLinks(s) {
+  if (!confirm(`Revoke every speaker link of ${s.title}? A console using one is cut off.`)) return;
+  const res = await fetch(`/api/admin/rooms/${s.id}/publisher-tokens/revoke`, { method: 'POST', headers: auth() });
+  if (!res.ok) throw new Error(`Could not revoke: ${(await res.text()).trim()}`);
+  $('error').textContent = '';
+  refresh();
+}
+
+async function deleteTranscript(s) {
+  if (!confirm(`Delete the whole transcript of ${s.title}, with its live fixes? This cannot be undone.`)) return;
+  const res = await fetch(`/api/admin/rooms/${s.id}/transcript`, { method: 'DELETE', headers: auth() });
+  if (!res.ok) throw new Error(`Could not delete: ${(await res.text()).trim()}`);
+  refresh();
+}
 $('token').onchange = () => { try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ } refresh(); };
 
 function ago(iso) {
@@ -111,14 +164,28 @@ function row(s) {
   const state = el('span', { className: s.live && !s.paused ? 'status live' : 'status', textContent: label });
   const errors = el('td', { className: 'num' }, String(s.errors));
   if (s.lastError) errors.append(el('span', { className: 'last-error', textContent: s.lastError }));
-  const token = encodeURIComponent($('token').value);
-  const links = [link('Console', `/operator/${s.id}?token=${token}`), ' · ', link('View', `/r/${s.id}`),
+  // The console reads the admin token this page saved: none in the link.
+  const links = [link('Console', `/operator/${s.id}`), ' · ', link('View', `/r/${s.id}`),
     ' · ', link('Screen', `/r/${s.id}?mode=screen`)];
   const talkQuery = s.talk ? `&talk=${s.talk}` : '';
-  for (const l of [s.source, ...s.targets]) links.push(' · ', link(`SRT ${l.toUpperCase()}`, `/export/${s.id}/srt?lang=${l}${talkQuery}`));
+  for (const l of [s.source, ...s.targets]) {
+    const a = link(`SRT ${l.toUpperCase()}`, `/export/${s.id}/srt?lang=${l}${talkQuery}`);
+    a.onclick = (e) => { e.preventDefault(); download(a.getAttribute('href')).catch((err) => { $('error').textContent = err.message; }); };
+    links.push(' · ', a);
+  }
   const button = el('button', { type: 'button', className: 'button secondary small', textContent: 'New session' });
   button.onclick = () => newTalk(s).catch((e) => { $('error').textContent = e.message; });
   const actions = [button];
+  const mint = el('button', { type: 'button', className: 'button secondary small', textContent: 'Speaker link' });
+  mint.onclick = () => speakerLink(s).catch((e) => { $('error').textContent = e.message; });
+  const revoke = el('button', { type: 'button', className: 'button secondary small', textContent: 'Revoke links' });
+  revoke.onclick = () => revokeLinks(s).catch((e) => { $('error').textContent = e.message; });
+  actions.push(' ', mint, ' ', revoke);
+  if (!s.live) {
+    const del = el('button', { type: 'button', className: 'button secondary small', textContent: 'Delete transcript' });
+    del.onclick = () => deleteTranscript(s).catch((e) => { $('error').textContent = e.message; });
+    actions.push(' ', del);
+  }
   if (s.live) {
     const pause = el('button', { type: 'button', className: 'button secondary small', textContent: s.paused ? 'Resume' : 'Pause' });
     pause.onclick = () => control(s, s.paused ? 'resume' : 'pause').catch((e) => { $('error').textContent = e.message; });
@@ -167,7 +234,6 @@ async function refresh() {
     }
     const rooms = await res.json();
     $('error').textContent = '';
-    $('metrics').href = `/metrics?token=${encodeURIComponent($('token').value)}`;
     summary(rooms);
     $('rows').replaceChildren(...rooms.map(row));
     $('updated').textContent = `Updated at ${new Date().toLocaleTimeString()}`;

@@ -8,6 +8,10 @@ x-app: &app
   stop_grace_period: 12s
   environment: &environment
     ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+    # The same on every server: speaker links and reader passes signed by
+    # one are valid on all.
+    TOKEN_SECRET: ${TOKEN_SECRET:-}
+    TRUST_PROXY: "on" # behind nginx, which sets X-Forwarded-For
     DATABASE_URL: postgres://dubash:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/dubash?sslmode=disable
     REDIS_URL: redis://redis:6379/0
     PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}

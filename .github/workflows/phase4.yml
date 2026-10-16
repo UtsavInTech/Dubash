@@ -38,7 +38,7 @@ jobs:
       - run: ./deploy/test-cluster.sh
       - name: Validate multi-node Compose configuration
         env:
-          ADMIN_TOKEN: offline-test
+          ADMIN_TOKEN: offline-test-token-of-enough-length
           POSTGRES_PASSWORD: offline-test
           GRAFANA_PASSWORD: offline-test
         run: docker compose -f deploy/compose.phase4.yml config --quiet

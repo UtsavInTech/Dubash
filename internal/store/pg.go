@@ -41,7 +41,7 @@ func OpenPG(ctx context.Context, url string) (*Store, error) {
 		return nil, fmt.Errorf("transcript schema: %w", err)
 	}
 
-	return &Store{pg: db}, nil
+	return &Store{pg: db, off: map[string]bool{}}, nil
 }
 
 func (s *Store) Close() {
@@ -92,4 +92,26 @@ func (s *Store) Ready(ctx context.Context) error {
 		return s.pg.Ping(ctx)
 	}
 	return nil
+}
+
+func (s *Store) deletePG(room string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := s.pg.Exec(ctx, `DELETE FROM dubash_segments WHERE room=$1`, room); err != nil {
+		return fmt.Errorf("delete transcript: %w", err)
+	}
+	return nil
+}
+
+// purgePG drops lines transcribed before cutoff; lines without a time
+// (written by old versions) are kept, as in files.
+func (s *Store) purgePG(room string, cutoff time.Time) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tag, err := s.pg.Exec(ctx, `DELETE FROM dubash_segments WHERE room=$1 AND payload ? 'at'
+ AND (payload->>'at')::timestamptz < $2`, room, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("purge transcript: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
 }

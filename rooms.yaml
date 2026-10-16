@@ -11,6 +11,13 @@
 # captions ("हमारी team ने cost बचाई"); leave it out to write them in
 # Devanagari. `glossary` terms bias recognition (at most 50 reach Sarvam)
 # and are never translated.
+#
+# Access and privacy (all optional; docs/RUNBOOK.md):
+#   audience_pin: "482193"   readers enter it once (or scan the hall's QR code)
+#   exports: readers         who may download the transcript: readers, admin, off
+#   join_revision: 1         bump it to make printed QR codes stop working
+#   retention_days: 30       delete stored lines and live fixes after this many days
+#   store_transcript: false  keep nothing on disk
 rooms:
   - id: main-hall
     title: "Main hall"

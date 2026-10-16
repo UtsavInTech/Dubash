@@ -74,6 +74,10 @@ type Store interface {
 
 	SaveCorrection(ctx context.Context, c Correction) (Correction, error)
 	Corrections(ctx context.Context, event string) ([]Correction, error)
+	// PurgeCorrections deletes event's live fixes made before cutoff, and
+	// blanks the transcript text in their audit entries (retention): it
+	// returns how many it deleted.
+	PurgeCorrections(ctx context.Context, event string, cutoff time.Time, actor string) (int, error)
 
 	// Audit returns the latest audit entries, newest first.
 	Audit(ctx context.Context, limit int) ([]AuditEntry, error)
@@ -318,7 +322,10 @@ func (s *FileStore) Pinned(_ context.Context, event string) (Version, bool, erro
 func (s *FileStore) SaveCorrection(_ context.Context, c Correction) (Correction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c.ID = int64(len(s.data.Corrections) + 1)
+	c.ID = 1
+	if n := len(s.data.Corrections); n > 0 {
+		c.ID = s.data.Corrections[n-1].ID + 1
+	}
 	s.data.Corrections = append(s.data.Corrections, c)
 	s.audit(c.By, "correct", fmt.Sprintf("event:%s segment:%d", c.Event, c.Segment), fmt.Sprintf("%q → %q", c.Raw, c.Corrected))
 	return c, s.save()
@@ -335,6 +342,35 @@ func (s *FileStore) Corrections(_ context.Context, event string) ([]Correction, 
 		}
 	}
 	return out, nil
+}
+
+// purgedDetail replaces transcript text in the audit log after a purge.
+const purgedDetail = "(text deleted: retention)"
+
+// PurgeCorrections implements Store.
+func (s *FileStore) PurgeCorrections(_ context.Context, event string, cutoff time.Time, actor string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	gone := map[string]bool{}
+	n := len(s.data.Corrections)
+	s.data.Corrections = slices.DeleteFunc(s.data.Corrections, func(c Correction) bool {
+		if c.Event == event && c.At.Before(cutoff) {
+			gone[fmt.Sprintf("event:%s segment:%d", c.Event, c.Segment)] = true
+			return true
+		}
+		return false
+	})
+	dropped := n - len(s.data.Corrections)
+	if dropped == 0 {
+		return 0, nil
+	}
+	for i, a := range s.data.Audit {
+		if a.Action == "correct" && gone[a.Object] {
+			s.data.Audit[i].Detail = purgedDetail
+		}
+	}
+	s.audit(actor, "purge", "event:"+event, fmt.Sprintf("%d live fixes before %s", dropped, cutoff.UTC().Format(time.RFC3339)))
+	return dropped, s.save()
 }
 
 // Audit implements Store.

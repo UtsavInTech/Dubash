@@ -94,7 +94,7 @@ Prometheus rules flag node loss, repeated pipeline errors, delayed translations,
 
 ## Boundary with Phase 5
 
-This phase does not add user accounts, change admin authentication, implement retention, or make a security-review claim. The other agent's Phase 5 changes must also cover PostgreSQL transcripts (not just JSONL files), authenticated `/metrics` scraping, cross-node control requests and transcript exports. Never expose `X-Dubash-Catalog` as an authorization mechanism: it only chooses local versus aggregated lists; the normal endpoint authorization remains in force.
+Phase 5 (merged on the `pilot` branch) adds roles, retention and the security review: its retention and deletion cover the PostgreSQL transcripts, and event requests reach the owning server; see docs/SECURITY_REVIEW.md, "With phase 4". Never expose `X-Dubash-Catalog` as an authorization mechanism: it only chooses local versus aggregated lists; the normal endpoint authorization remains in force.
 
 
 ## Local verification on 2026-10-16

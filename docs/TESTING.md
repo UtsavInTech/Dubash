@@ -6,11 +6,25 @@
 |---|---|---|
 | Go unit and integration tests | `go test -race ./...` | All tested packages pass (15); bank stores also against PostgreSQL with `DUBASH_TEST_PG` |
 | Vet / format | `go vet ./...`, `gofmt -l .` | Clean |
-| Browser end to end | `(cd e2e && npm ci && npx playwright install chromium && ./run.sh)` | 67 passed, 0 failed (49 upstream; a Hindi event read in Telugu; a live fix, the bank, a script and a rehearsal) |
+| Browser end to end | `(cd e2e && npm ci && npx playwright install chromium && ./run.sh)` | 78 passed, 0 failed (49 upstream; a Hindi event read in Telugu; a live fix, the bank, a script and a rehearsal; phase 5: headers, a PIN event, a speaker link revoked while live) |
 | Fake server smoke | `ADMIN_TOKEN=x go run ./cmd/dubash -fake`, then `head -c 384000 /dev/zero \| go run ./cmd/dubash-ingest -room sala-a -token x -realtime` | Interims, finals with translations, SRT export and metrics all work |
 | staticcheck | `go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...` | Fails locally under Go 1.27 (tool too old for its export data); CI runs it on Go 1.26 |
 
 The e2e suite needs port 8080 free and uses `e2e/rooms.yaml`.
+
+After merging phases 4 and 5 (branch `pilot`, 2026-10-16), also run
+locally with a test PostgreSQL and Redis 7.2:
+
+| Suite | Command | Result |
+|---|---|---|
+| Integration (PostgreSQL, Redis) | `TEST_DATABASE_URL=… TEST_REDIS_URL=… DUBASH_TEST_PG=… go test -race ./...` | All pass, including two-node ownership and cross-node SSE, the catalog without rooms.yaml, PostgreSQL transcripts across restarts, PostgreSQL retention and deletion |
+| Two servers | `deploy/test-cluster.sh` | 100 readers per event through the non-owner, 0 errors, first caption p95 3.05 s; owner restart keeps its transcript |
+| Load | `VIEWERS=200 DURATION=9s deploy/loadtest.sh` | 200 readers, 600 lines and 600 translations, 0 errors |
+| Browser end to end | `e2e/run.sh` | 78 passed, 0 failed |
+
+Not run locally: the Docker Compose stack (nginx, Prometheus, Grafana) —
+Docker is not installed here; CI validates the Compose file and alert
+rules.
 
 ### Rules with tests (phase 1)
 
@@ -37,6 +51,16 @@ The e2e suite needs port 8080 free and uses `e2e/rooms.yaml`.
 | Correction rules: numbers, negations, no insertion/deletion, evidence for ambiguous terms, deadline | `correct.TestRules`, `correct.TestNoInsertionsOrDeletions`, `correct.TestDeterministicCorrections`, `correct.TestModelEditsAreChecked`, `correct.TestModelDeadline` |
 | Scripts: extraction, chunks, alignment, term suggestions | `script.Test*`, `bank.TestScriptSuggestions` |
 | Cost per event | `web.TestCosts` |
+| Speaker link limited to its event; revoked tokens refused; revocations persist | `web.TestPublisherTokenIsLimitedToItsEvent`, `web.TestPublisherTokens` |
+| Token as WebSocket subprotocol; revoking cuts a live console (4003) | `web.TestIngestTokenAsSubprotocolAndRevocationCutsIt` |
+| Lockout after 10 failures | `web.TestFailedAttemptsLockOut` |
+| Audience PIN, QR join code, revoked codes, exports policy | `web.TestAudiencePIN`, `web.TestExportsOff` |
+| Security headers; staff pages not framable | `web.TestSecurityHeaders` |
+| Caption connection caps | `web.TestViewerCaps` |
+| Retention and deletion (store, live fixes, audit text) | `web.TestRetentionAndDelete`, `store.TestDisableDeleteAndPurge`, `bank.TestPurgeCorrectionsContract` |
+| Transcript files private | `store.TestTranscriptsArePrivate` |
+| Weak or empty admin token refused on a public address | `main.TestCheckToken` |
+| Privacy settings validated | `config.TestParseErrors`, `config.TestPrivacySettings` |
 
 ### Live checks against real providers (manual, cost money)
 

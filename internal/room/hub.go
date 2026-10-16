@@ -91,6 +91,30 @@ func NewHub(size int, seed []caption.Segment) *Hub {
 	return h
 }
 
+// Forget drops the history kept for new and resuming viewers (the
+// transcript was deleted). Screens already showing lines keep them.
+func (h *Hub) Forget() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ring = nil
+}
+
+// ForgetBefore drops the lines transcribed before cutoff, and their
+// translations, from the history (the retention period passed).
+func (h *Hub) ForgetBefore(cutoff time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	old := map[int]bool{}
+	for _, m := range h.ring {
+		if seg, ok := m.Data.(caption.Segment); ok && !seg.At.IsZero() && seg.At.Before(cutoff) {
+			old[m.Segment] = true
+		}
+	}
+	if len(old) > 0 {
+		h.ring = slices.DeleteFunc(h.ring, func(m Msg) bool { return old[m.Segment] })
+	}
+}
+
 // Instance identifies this hub's sequence numbers.
 func (h *Hub) Instance() string { return h.instance }
 

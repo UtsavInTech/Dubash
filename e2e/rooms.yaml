@@ -22,3 +22,10 @@ rooms:
     speaker: "Test Speaker"
     source: hi
     targets: [en, te]
+  # Phase 5: an event whose readers need a PIN (or the hall's QR code).
+  - id: hall-pin
+    title: "Closed session"
+    source: hi
+    targets: [en]
+    audience_pin: "482193"
+    exports: admin
