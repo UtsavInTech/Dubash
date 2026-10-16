@@ -77,6 +77,10 @@ def prepare():
         except OSError as e:
             log("could not copy events.yaml (%s): starting with rooms.yaml only" % e)
     os.environ["TRUST_PROXY"] = "on"
+    # DeepFilterNet3 (noise removal in the speaker console) is too large for
+    # the AppSail package: load it from jsDelivr, pinned to the commit that
+    # added it. The browser checks both files by SHA-256 regardless.
+    os.environ.setdefault("DENOISE_URL", "https://cdn.jsdelivr.net/gh/UtsavInTech/Dubash@5345b75a6555deb385661ebf1fc9754500f127b3/third_party/deepfilternet/")
     os.environ["DUBASH_TEMPORARY_DATA"] = "on"
     # Live with a Sarvam key (real recognition and translation, billed to
     # that key); scripted demo captions without one, or with DUBASH_DEMO=on.
