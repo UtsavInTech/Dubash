@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/caption"
 	"github.com/UtsavInTech/dubash/internal/config"
 	"github.com/UtsavInTech/dubash/internal/store"
@@ -24,7 +25,7 @@ import (
 
 type failTranslator struct{}
 
-func (failTranslator) Translate(context.Context, string, string, string, []string) (string, error) {
+func (failTranslator) Translate(context.Context, string, string, string, translate.Glossary) (string, error) {
 	return "", errors.New("boom")
 }
 
@@ -175,7 +176,7 @@ type counting struct {
 	n  map[string]int
 }
 
-func (c *counting) Translate(_ context.Context, text, _, dst string, _ []string) (string, error) {
+func (c *counting) Translate(_ context.Context, text, _, dst string, _ translate.Glossary) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.n == nil {
@@ -216,7 +217,7 @@ func TestRoomTranslatesOnlyLanguagesBeingRead(t *testing.T) {
 // slowLang delays one language and fails another.
 type slowLang struct{ delay time.Duration }
 
-func (s slowLang) Translate(ctx context.Context, text, _, dst string, _ []string) (string, error) {
+func (s slowLang) Translate(ctx context.Context, text, _, dst string, _ translate.Glossary) (string, error) {
 	switch dst {
 	case "te":
 		select {
@@ -329,7 +330,7 @@ func (s scripted) Run(ctx context.Context, _ asr.Config, audio <-chan []byte, ev
 // gated translates only when released.
 type gated chan struct{}
 
-func (g gated) Translate(ctx context.Context, text, _, dst string, _ []string) (string, error) {
+func (g gated) Translate(ctx context.Context, text, _, dst string, _ translate.Glossary) (string, error) {
 	<-g
 	return "[" + dst + "] " + text, nil
 }
@@ -594,14 +595,14 @@ type batcher struct {
 	split   bool
 }
 
-func (b *batcher) Translate(_ context.Context, text, _, dst string, _ []string) (string, error) {
+func (b *batcher) Translate(_ context.Context, text, _, dst string, _ translate.Glossary) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.singles++
 	return "[" + dst + "] " + text, nil
 }
 
-func (b *batcher) TranslateBatch(_ context.Context, lines []string, _, dst string, _ []string) ([]string, error) {
+func (b *batcher) TranslateBatch(_ context.Context, lines []string, _, dst string, _ translate.Glossary) ([]string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.batches = append(b.batches, lines)
@@ -655,7 +656,7 @@ func TestRoomBatchesWaitingLines(t *testing.T) {
 // behind it as they do behind a real network call.
 type slowFirst struct{ *batcher }
 
-func (s slowFirst) Translate(ctx context.Context, text, src, dst string, g []string) (string, error) {
+func (s slowFirst) Translate(ctx context.Context, text, src, dst string, g translate.Glossary) (string, error) {
 	s.mu.Lock()
 	first := s.singles == 0 && len(s.batches) == 0
 	s.mu.Unlock()
@@ -663,4 +664,135 @@ func (s slowFirst) Translate(ctx context.Context, text, src, dst string, g []str
 		time.Sleep(50 * time.Millisecond)
 	}
 	return s.batcher.Translate(ctx, text, src, dst, g)
+}
+
+// recording keeps the glossary each translation was given, and the hints
+// the recognizer was given.
+type recording struct {
+	mu       sync.Mutex
+	glossary []translate.Glossary
+	hints    []string
+	lines    []string
+	gate     chan struct{} // optional: hold each line until released
+}
+
+func (r *recording) Translate(_ context.Context, text, _, dst string, g translate.Glossary) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.glossary = append(r.glossary, g)
+	return "[" + dst + "] " + text, nil
+}
+
+func (r *recording) Run(ctx context.Context, cfg asr.Config, audio <-chan []byte, events chan<- asr.Event) error {
+	r.mu.Lock()
+	r.hints = cfg.Vocabulary
+	r.mu.Unlock()
+	for _, l := range r.lines {
+		if r.gate != nil {
+			<-r.gate
+		}
+		events <- asr.Event{Kind: asr.Final, Text: l}
+	}
+	for range audio {
+	}
+	return nil
+}
+
+func version(n int, entries ...bank.Entry) bank.Version {
+	for i := range entries {
+		entries[i].Status = bank.Approved
+	}
+	v := bank.NewVersion(entries, "hall", "", "test", "")
+	v.Number = n
+	return v
+}
+
+// TestRoomUsesThePinnedVersion: hints and glossary come from the pinned
+// Dictation Bank version, and a version pinned during a transmission
+// applies from the next committed line.
+func TestRoomUsesThePinnedVersion(t *testing.T) {
+	rec := &recording{lines: []string{"राम कथा सुनो।", "फिर राम कथा।"}, gate: make(chan struct{})}
+	cfg := config.Room{ID: "hall", Source: "hi", Targets: []string{"te"}, Glossary: []string{"Dubash"}}
+	rm := newRoomWith(t, cfg, newStore(t), rec, rec)
+	rm.SetVersion(version(1, bank.Entry{Scope: bank.ScopeEvent, ScopeID: "hall", Term: "राम कथा", Lang: "hi", Translations: map[string]string{"te": "రామకథ"}}))
+	_, _, cancel := rm.Hub().Subscribe(64, "te", "")
+	defer cancel()
+	audio := make(chan []byte)
+	done := make(chan error, 1)
+	go func() { done <- rm.Run(context.Background(), Transmission{}, audio) }()
+	rec.gate <- struct{}{} // first line under version 1
+	waitFor(t, func() bool { rec.mu.Lock(); defer rec.mu.Unlock(); return len(rec.glossary) == 1 })
+	rm.SetVersion(version(2, bank.Entry{Scope: bank.ScopeEvent, ScopeID: "hall", Term: "राम कथा", Lang: "hi", Translations: map[string]string{"te": "శ్రీరామ కథ"}}))
+	rec.gate <- struct{}{} // second line under version 2
+	close(audio)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(rec.hints, []string{"राम कथा", "Dubash"}) {
+		t.Errorf("recognizer hints %q", rec.hints)
+	}
+	if len(rec.glossary) != 2 || rec.glossary[0].Terms[0].Target != "రామకథ" || rec.glossary[1].Terms[0].Target != "శ్రీరామ కథ" {
+		t.Fatalf("glossaries %+v", rec.glossary)
+	}
+	if !slices.Equal(rec.glossary[0].Keep, []string{"Dubash"}) {
+		t.Errorf("rooms.yaml glossary not kept: %+v", rec.glossary[0])
+	}
+	if st := rm.Status(); st.ContextVersion != 2 || st.ContextEntries != 1 {
+		t.Errorf("status %+v", st)
+	}
+}
+
+func TestCorrectPublishesARevision(t *testing.T) {
+	st := newStore(t)
+	rm := newRoomWith(t, config.Room{ID: "hall", Source: "hi", Targets: []string{"te", "kn"}}, st,
+		&recording{lines: []string{"डबस में स्वागत है।"}}, &recording{})
+	sub, _, cancel := rm.Hub().Subscribe(64, "te", "")
+	defer cancel()
+	audio := make(chan []byte)
+	close(audio)
+	if err := rm.Run(context.Background(), Transmission{}, audio); err != nil {
+		t.Fatal(err)
+	}
+	finals(sub) // drain
+	before, after, err := rm.Correct(context.Background(), 0, "  Dubash  में स्वागत है। ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Text != "डबस में स्वागत है।" || after.Text != "Dubash में स्वागत है।" || after.Raw != before.Text || after.Rev != 1 {
+		t.Fatalf("before %+v after %+v", before, after)
+	}
+	var corr caption.Segment
+	var tr caption.Translation
+	deadline := time.After(2 * time.Second)
+	for tr.Rev == 0 {
+		select {
+		case m := <-sub:
+			switch d := m.Data.(type) {
+			case caption.Segment:
+				if m.Event == "correction" {
+					corr = d
+				}
+			case caption.Translation:
+				tr = d
+			}
+		case <-deadline:
+			t.Fatal("no new translation")
+		}
+	}
+	if corr.Rev != 1 || tr.Lang != "te" || tr.Text != "[te] Dubash में स्वागत है।" {
+		t.Fatalf("correction %+v translation %+v (only the language being read)", corr, tr)
+	}
+	waitFor(t, func() bool {
+		segs, _, _ := st.Load("hall")
+		return len(segs) == 1 && segs[0].Rev == 1 && segs[0].Translations["te"] != ""
+	})
+	if r := rm.Hub().Recent(); r[0].Text != after.Text || r[0].Translations["te"] != tr.Text {
+		t.Fatalf("recent %+v", r[0])
+	}
+	if _, _, err := rm.Correct(context.Background(), 99, "x"); !errors.Is(err, ErrUnknownSegment) {
+		t.Fatalf("unknown line: %v", err)
+	}
+	if _, same, _ := rm.Correct(context.Background(), 0, "Dubash में स्वागत है।"); same.Rev != 1 {
+		t.Fatalf("an identical text made a new revision: %+v", same)
+	}
 }

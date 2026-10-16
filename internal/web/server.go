@@ -23,6 +23,7 @@ import (
 	"github.com/coder/websocket"
 	"rsc.io/qr"
 
+	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/caption"
 	"github.com/UtsavInTech/dubash/internal/export"
 	"github.com/UtsavInTech/dubash/internal/room"
@@ -44,6 +45,9 @@ type Server struct {
 	// PublicURL is the audience-facing base URL (https://subs.example.org)
 	// encoded in QR codes. Empty means the URL the request came in on.
 	PublicURL string
+
+	// Bank is the Dictation Bank store; nil disables its pages and API.
+	Bank bank.Store
 
 	// drainGrace is how long a room's pipeline may keep finishing after
 	// its operator disconnects before it is cancelled.
@@ -92,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /ingest/{room}", s.auth(s.ingest))
 	mux.HandleFunc("GET /export/{room}/{format}", s.export)
 	mux.Handle("GET /samples/", http.StripPrefix("/samples/", http.FileServer(http.Dir("samples"))))
+	s.bankRoutes(mux)
 	return mux
 }
 

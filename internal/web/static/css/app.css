@@ -302,3 +302,8 @@ td.links div { margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- Dictation Bank (Dubash) ---------- */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.header-link { color: inherit; }
+textarea { font: inherit; width: 100%; padding: 8px; border: 2px solid var(--border-strong); }

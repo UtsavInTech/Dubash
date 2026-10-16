@@ -19,7 +19,7 @@ type Hedged struct {
 }
 
 // Translate implements Translator.
-func (h Hedged) Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error) {
+func (h Hedged) Translate(ctx context.Context, text, src, dst string, g Glossary) (string, error) {
 	after := h.After
 	if after <= 0 {
 		after = DefaultHedgeAfter
@@ -32,7 +32,7 @@ func (h Hedged) Translate(ctx context.Context, text, src, dst string, glossary [
 	}
 	results := make(chan result, 2)
 	call := func() {
-		out, err := h.Inner.Translate(ctx, text, src, dst, glossary)
+		out, err := h.Inner.Translate(ctx, text, src, dst, g)
 		results <- result{out, err}
 	}
 	go call()

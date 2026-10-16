@@ -236,9 +236,8 @@ func (h *Hub) Recent() []caption.Segment {
 		switch d := m.Data.(type) {
 		case caption.Segment:
 			if i, ok := index[d.ID]; ok { // a correction replaces the line
-				tr := out[i].Translations
 				out[i] = d
-				out[i].Translations = tr
+				out[i].Translations = map[string]string{}
 				continue
 			}
 			index[d.ID] = len(out)
@@ -248,7 +247,8 @@ func (h *Hub) Recent() []caption.Segment {
 			}
 			out = append(out, d)
 		case caption.Translation:
-			if i, ok := index[d.Segment]; ok && d.Text != "" {
+			// Only translations of the line's current revision count.
+			if i, ok := index[d.Segment]; ok && d.Text != "" && d.Rev == out[i].Rev {
 				out[i].Translations[d.Lang] = d.Text
 			}
 		}

@@ -14,7 +14,7 @@ import (
 )
 
 func TestMaskUnmask(t *testing.T) {
-	masked, slots := Mask("Welcome to Dubash, by Sarvam AI and sarvam. Dubashi is another word. बागेश्वर धाम में", []string{"Sarvam", "Sarvam AI", "Dubash", "बागेश्वर धाम", " "})
+	masked, slots := Mask("Welcome to Dubash, by Sarvam AI and sarvam. Dubashi is another word. बागेश्वर धाम में", Keep("Sarvam", "Sarvam AI", "Dubash", "बागेश्वर धाम", " "))
 	// Longest terms are masked first and numbered first; "sarvam" is put
 	// back as the glossary writes it.
 	want := "Welcome to [4], by [2] and [3]. Dubashi is another word. [1] में"
@@ -33,7 +33,7 @@ func TestMaskUnmask(t *testing.T) {
 	}
 	// Ten or more slots: [1] must not eat the start of [10].
 	terms := []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10"}
-	m, s := Mask(strings.Join(terms, " "), terms)
+	m, s := Mask(strings.Join(terms, " "), Keep(terms...))
 	if back, ok := Unmask(m, s); !ok || back != strings.Join(terms, " ") {
 		t.Errorf("ten slots: %q → %q", m, back)
 	}
@@ -59,17 +59,17 @@ func TestSarvamTranslator(t *testing.T) {
 	defer srv.Close()
 	s := Sarvam{Key: "k", URL: srv.URL}
 
-	got, err := s.Translate(context.Background(), "Dubash में स्वागत", "hi", "te", []string{"Dubash"})
+	got, err := s.Translate(context.Background(), "Dubash में स्वागत", "hi", "te", Keep("Dubash"))
 	if err != nil || got != "Dubash में స్వాగతం" || inputs[0] != "[1] में स्वागत" {
 		t.Errorf("got %q err %v sent %q", got, err, inputs)
 	}
 	// A lost placeholder: the line is translated again, unmasked.
 	inputs = nil
-	got, err = s.Translate(context.Background(), "drop Dubash", "hi", "te", []string{"Dubash"})
+	got, err = s.Translate(context.Background(), "drop Dubash", "hi", "te", Keep("Dubash"))
 	if err != nil || len(inputs) != 2 || inputs[1] != "drop Dubash" {
 		t.Errorf("fallback: %q %v %q", got, err, inputs)
 	}
-	if _, err := s.Translate(context.Background(), "x", "hi", "fr", nil); err == nil {
+	if _, err := s.Translate(context.Background(), "x", "hi", "fr", Glossary{}); err == nil {
 		t.Error("French accepted")
 	}
 }
@@ -79,7 +79,7 @@ func TestSarvamRateLimited(t *testing.T) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
-	_, err := Sarvam{Key: "k", URL: srv.URL}.Translate(context.Background(), "x", "hi", "te", nil)
+	_, err := Sarvam{Key: "k", URL: srv.URL}.Translate(context.Background(), "x", "hi", "te", Glossary{})
 	if err != ErrRateLimited {
 		t.Errorf("err %v", err)
 	}
@@ -136,12 +136,36 @@ func TestSarvamBatch(t *testing.T) {
 	}))
 	defer srv.Close()
 	s := Sarvam{Key: "k", URL: srv.URL}
-	got, err := s.TranslateBatch(context.Background(), []string{"एक Dubash", "दो\nलाइन", "तीन"}, "hi", "te", []string{"Dubash"})
+	got, err := s.TranslateBatch(context.Background(), []string{"एक Dubash", "दो\nलाइन", "तीन"}, "hi", "te", Keep("Dubash"))
 	if err != nil || strings.Join(got, "|") != "ఒకటి Dubash|दो लाइन|तीन" || inputs[0] != "एक [1]\nदो लाइन\nतीन" {
 		t.Fatalf("got %q err %v sent %q", got, err, inputs)
 	}
 	split = false
-	if _, err := s.TranslateBatch(context.Background(), []string{"एक", "दो"}, "hi", "te", nil); err != ErrBatchSplit {
+	if _, err := s.TranslateBatch(context.Background(), []string{"एक", "दो"}, "hi", "te", Glossary{}); err != ErrBatchSplit {
 		t.Fatalf("lost line breaks: %v", err)
+	}
+}
+
+// TestApprovedTranslations: a term with an approved translation comes back
+// as that translation, whichever spelling was said.
+func TestApprovedTranslations(t *testing.T) {
+	g := Glossary{
+		Keep:  []string{"Dubash"},
+		Terms: []Term{{Source: []string{"राम कथा", "रामकथा"}, Target: "రామకథ"}, {Source: []string{"चोला"}, Target: "చోళా వస్త్రం"}},
+	}
+	masked, restore := Mask("Dubash पर राम कथा और रामकथा, फिर चोला।", g)
+	// Numbered as masked: the longest spelling first.
+	if masked != "[2] पर [1] और [1], फिर [3]।" {
+		t.Fatalf("masked %q", masked)
+	}
+	back, ok := Unmask("[2]లో [1] మరియు [1], తర్వాత [3].", restore)
+	if !ok || back != "Dubashలో రామకథ మరియు రామకథ, తర్వాత చోళా వస్త్రం." {
+		t.Fatalf("restored %q %v", back, ok)
+	}
+	p := Prompt("hi", "te", g)
+	for _, want := range []string{"keep them exactly as written: Dubash", "approved translations into Telugu", "राम कथा / रामकथा → రామకథ", "Never invent names"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt lacks %q:\n%s", want, p)
+		}
 	}
 }

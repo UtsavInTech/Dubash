@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,9 +29,10 @@ const DefaultSarvamModel = "sarvam-translate:v1"
 
 // Sarvam translates with Sarvam's POST /translate.
 //
-// The API has no glossary parameter (checked 2026-10-16), so terms that
-// must not be translated are replaced by numbered placeholders ("[1]")
-// before the call and put back after it: Sarvam keeps such placeholders
+// The API has no glossary parameter (checked 2026-10-16), so keep-terms
+// and terms with an approved translation are replaced by numbered
+// placeholders ("[1]") before the call, and put back after it (as written,
+// or as the approved translation): Sarvam keeps such placeholders
 // in Hindi, Telugu and Kannada (probe in sarvam_probe_test.go). If the
 // answer loses a placeholder, the line is translated again without them,
 // so no word is dropped from the caption.
@@ -46,7 +48,7 @@ type Sarvam struct {
 var ErrRateLimited = errors.New("sarvam translate: rate limited")
 
 // Translate implements Translator.
-func (s Sarvam) Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error) {
+func (s Sarvam) Translate(ctx context.Context, text, src, dst string, g Glossary) (string, error) {
 	from, to := lang.Sarvam(src), lang.Sarvam(dst)
 	if from == "" || to == "" {
 		return "", fmt.Errorf("sarvam translate: %s→%s is not supported", src, dst)
@@ -54,7 +56,7 @@ func (s Sarvam) Translate(ctx context.Context, text, src, dst string, glossary [
 	if src == dst {
 		return text, nil
 	}
-	masked, slots := Mask(text, glossary)
+	masked, slots := Mask(text, g)
 	out, err := s.call(ctx, masked, from, to)
 	if err != nil {
 		return "", err
@@ -78,9 +80,9 @@ const MaxBatchChars = 1800
 // TranslateBatch implements Batcher: the lines go in one request, one per
 // line; Sarvam keeps single line breaks (probe in sarvam_probe2_test.go,
 // 2026-10-16: 5 of 5 lines in en, te and kn).
-func (s Sarvam) TranslateBatch(ctx context.Context, lines []string, src, dst string, glossary []string) ([]string, error) {
+func (s Sarvam) TranslateBatch(ctx context.Context, lines []string, src, dst string, g Glossary) ([]string, error) {
 	if len(lines) == 1 {
-		out, err := s.Translate(ctx, lines[0], src, dst, glossary)
+		out, err := s.Translate(ctx, lines[0], src, dst, g)
 		return []string{out}, err
 	}
 	from, to := lang.Sarvam(src), lang.Sarvam(dst)
@@ -91,7 +93,7 @@ func (s Sarvam) TranslateBatch(ctx context.Context, lines []string, src, dst str
 	for i, l := range lines {
 		clean[i] = strings.Join(strings.Fields(l), " ") // no line breaks inside a line
 	}
-	masked, slots := Mask(strings.Join(clean, "\n"), glossary)
+	masked, slots := Mask(strings.Join(clean, "\n"), g)
 	out, err := s.call(ctx, masked, from, to)
 	if err != nil {
 		return nil, err
@@ -158,54 +160,48 @@ func (s Sarvam) call(ctx context.Context, text, from, to string) (string, error)
 	return "", errors.New("sarvam translate: empty response")
 }
 
-// Mask replaces each occurrence of a term (whole words only, longest term
-// first, Latin terms ignoring case) with a numbered placeholder "[n]".
-// slots[n-1] is the text to put back: the term as written in the
-// glossary.
-func Mask(text string, terms []string) (string, []string) {
-	ordered := make([]string, 0, len(terms))
-	for _, t := range terms {
-		if t = strings.TrimSpace(t); t != "" {
-			ordered = append(ordered, t)
+// Mask replaces each occurrence (whole words only, longest spelling
+// first, Latin text ignoring case) of a glossary term with a numbered
+// placeholder "[n]", numbered in order of first use. restore[n-1] is what
+// to put back: the keep-term as written, or the approved translation.
+func Mask(text string, g Glossary) (masked string, restore []string) {
+	type spelling struct {
+		text string
+		slot int
+	}
+	slots := g.slots()
+	var all []spelling
+	for i, s := range slots {
+		for _, sp := range s.spellings {
+			all = append(all, spelling{sp, i})
 		}
 	}
-	// Longest first, so "Sarvam AI" wins over "Sarvam".
-	for i := 1; i < len(ordered); i++ {
-		for j := i; j > 0 && utf8.RuneCountInString(ordered[j]) > utf8.RuneCountInString(ordered[j-1]); j-- {
-			ordered[j], ordered[j-1] = ordered[j-1], ordered[j]
-		}
-	}
-	var slots []string
-	for _, term := range ordered {
+	slices.SortStableFunc(all, func(a, b spelling) int {
+		return utf8.RuneCountInString(b.text) - utf8.RuneCountInString(a.text)
+	})
+	number := map[int]int{} // slot → placeholder number
+	for _, sp := range all {
 		var b strings.Builder
 		rest := text
 		for {
-			i := indexWord(rest, term)
+			i := indexWord(rest, sp.text)
 			if i < 0 {
 				b.WriteString(rest)
 				break
 			}
 			b.WriteString(rest[:i])
-			n := slotOf(slots, term)
-			if n == 0 {
-				slots = append(slots, term)
-				n = len(slots)
+			n, ok := number[sp.slot]
+			if !ok {
+				restore = append(restore, slots[sp.slot].restore)
+				n = len(restore)
+				number[sp.slot] = n
 			}
 			b.WriteString("[" + strconv.Itoa(n) + "]")
-			rest = rest[i+len(term):]
+			rest = rest[i+len(sp.text):]
 		}
 		text = b.String()
 	}
-	return text, slots
-}
-
-func slotOf(slots []string, term string) int {
-	for i, s := range slots {
-		if s == term {
-			return i + 1
-		}
-	}
-	return 0
+	return text, restore
 }
 
 // indexWord finds term in s as a whole word: not inside a longer word,

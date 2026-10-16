@@ -7,19 +7,19 @@ import (
 )
 
 func TestPromptNamesLanguagesAndGlossary(t *testing.T) {
-	p := Prompt("en", "es", []string{"Kubernetes", "Nerdearla"})
+	p := Prompt("en", "es", Keep("Kubernetes", "Nerdearla"))
 	for _, want := range []string{"from English to Spanish", "Kubernetes, Nerdearla", "Output only the translation"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt missing %q:\n%s", want, p)
 		}
 	}
-	if strings.Contains(Prompt("es", "en", nil), "Never translate these terms") {
+	if strings.Contains(Prompt("es", "en", Glossary{}), "Never translate these terms") {
 		t.Error("empty glossary should not add the glossary clause")
 	}
 }
 
 func TestFake(t *testing.T) {
-	got, err := Fake{}.Translate(context.Background(), "Hello.", "en", "es", nil)
+	got, err := Fake{}.Translate(context.Background(), "Hello.", "en", "es", Glossary{})
 	if err != nil || got != "[es] Hello." {
 		t.Fatalf("got %q, %v", got, err)
 	}

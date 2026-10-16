@@ -27,8 +27,8 @@ type Chat struct {
 }
 
 // Translate implements Translator.
-func (c Chat) Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error) {
-	return translateWith(ctx, c.generate, text, src, dst, glossary)
+func (c Chat) Translate(ctx context.Context, text, src, dst string, g Glossary) (string, error) {
+	return translateWith(ctx, c.generate, text, src, dst, g)
 }
 
 type chatMessage struct {

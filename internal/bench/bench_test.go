@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"github.com/UtsavInTech/dubash/internal/translate"
 	"io"
 	"math"
 	"net/http"
@@ -300,7 +301,7 @@ func TestRunScripted(t *testing.T) {
 // fakeKeep "translates" by returning the text, so keep-terms survive.
 type fakeKeep struct{}
 
-func (fakeKeep) Translate(_ context.Context, text, _, _ string, _ []string) (string, error) {
+func (fakeKeep) Translate(_ context.Context, text, _, _ string, _ translate.Glossary) (string, error) {
 	return text, nil
 }
 

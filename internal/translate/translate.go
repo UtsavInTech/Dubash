@@ -11,10 +11,10 @@ import (
 	"github.com/UtsavInTech/dubash/internal/lang"
 )
 
-// Translator translates one caption line from src to dst, leaving glossary
-// terms untouched.
+// Translator translates one caption line from src to dst, respecting the
+// glossary: keep-terms unchanged, approved terms as approved.
 type Translator interface {
-	Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error)
+	Translate(ctx context.Context, text, src, dst string, g Glossary) (string, error)
 }
 
 // Batcher is a Translator that can translate several consecutive lines in
@@ -23,7 +23,7 @@ type Translator interface {
 // lines give each other context.
 type Batcher interface {
 	Translator
-	TranslateBatch(ctx context.Context, lines []string, src, dst string, glossary []string) ([]string, error)
+	TranslateBatch(ctx context.Context, lines []string, src, dst string, g Glossary) ([]string, error)
 }
 
 // ErrBatchSplit means a batch came back with a different number of lines
@@ -33,16 +33,15 @@ var ErrBatchSplit = errors.New("batch translation lost its line breaks")
 func name(code string) string { return lang.Name(code) }
 
 // Prompt is the system instruction for one language pair.
-func Prompt(src, dst string, glossary []string) string {
+func Prompt(src, dst string, g Glossary) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You translate live conference captions from %s to %s.\n", name(src), name(dst))
 	fmt.Fprintf(&b, "A line may be in another language (a question from the audience, a quote): translate it into %s all the same. ", name(dst))
 	b.WriteString("Output only the translation of the given line: no quotes, notes or explanations. ")
 	b.WriteString("Keep product names, code, commands and acronyms that are normally left untranslated. ")
 	b.WriteString("The line may be an incomplete sentence; translate it as is, without completing or answering it.")
-	if len(glossary) > 0 {
-		fmt.Fprintf(&b, "\nNever translate these terms and keep their spelling: %s.", strings.Join(glossary, ", "))
-	}
+	b.WriteString(" Never invent names, numbers or dates that are not in the line.")
+	b.WriteString(g.promptRules(dst))
 	return b.String()
 }
 
@@ -53,8 +52,8 @@ type generator func(ctx context.Context, system, text string) (string, error)
 // translateWith translates text with a language model. Small models
 // sometimes hand the line back untranslated; asking again with the target
 // language in the message fixes it.
-func translateWith(ctx context.Context, gen generator, text, src, dst string, glossary []string) (string, error) {
-	system := Prompt(src, dst, glossary)
+func translateWith(ctx context.Context, gen generator, text, src, dst string, g Glossary) (string, error) {
+	system := Prompt(src, dst, g)
 	out, err := gen(ctx, system, text)
 	if err == nil && src != dst && Echoed(text, out) {
 		out, err = gen(ctx, system, fmt.Sprintf("Translate into %s: %s", name(dst), text))
@@ -88,6 +87,6 @@ func Echoed(text, out string) bool {
 type Fake struct{}
 
 // Translate implements Translator.
-func (Fake) Translate(_ context.Context, text, _, dst string, _ []string) (string, error) {
+func (Fake) Translate(_ context.Context, text, _, dst string, _ Glossary) (string, error) {
 	return "[" + dst + "] " + text, nil
 }

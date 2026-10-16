@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/UtsavInTech/dubash/internal/translate"
 )
 
 // Recording is one audio file and what was really said in it, read from
@@ -101,6 +103,21 @@ func (v Vocabulary) Keep() []string {
 		}
 	}
 	return out
+}
+
+// Glossary is what translating into dst must respect: keep-terms, and
+// approved translations into dst.
+func (v Vocabulary) Glossary(dst string) translate.Glossary {
+	var g translate.Glossary
+	for _, t := range v.Terms {
+		switch {
+		case t.Translations[dst] != "":
+			g.Terms = append(g.Terms, translate.Term{Source: append([]string{t.Term}, t.Aliases...), Target: t.Translations[dst]})
+		case t.Keep:
+			g.Keep = append(g.Keep, t.Term)
+		}
+	}
+	return g
 }
 
 // LoadRecordings reads every NAME.yaml in dir that has a NAME.wav beside

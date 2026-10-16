@@ -464,7 +464,8 @@ function connect() {
   events.addEventListener('translation', (e) => {
     const tr = JSON.parse(e.data);
     const seg = segments.get(tr.segment);
-    if (!seg || tr.lang !== lang) return;
+    // A translation of an earlier revision of a corrected line is stale.
+    if (!seg || tr.lang !== lang || (tr.rev ?? 0) < (seg.rev ?? 0)) return;
     if (tr.error) seg.failed[tr.lang] = true;
     else seg.translations[tr.lang] = tr.text;
     renderLines();

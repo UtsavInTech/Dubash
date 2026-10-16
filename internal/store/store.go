@@ -1,5 +1,8 @@
 // Package store persists finalized segments as one append-only JSONL file
 // per room, so transcripts survive restarts and can be exported.
+//
+// Modified by the Dubash contributors: a corrected line is appended again
+// and Load keeps its latest revision.
 package store
 
 import (
@@ -54,6 +57,24 @@ func (s *Store) Append(seg caption.Segment) error {
 	return f.Close()
 }
 
+// latest keeps, for each segment id, its last stored revision (a live
+// correction appends the line again), in the order the ids first appear.
+func latest(segs []caption.Segment) []caption.Segment {
+	pos := map[int]int{}
+	var out []caption.Segment
+	for _, s := range segs {
+		if i, ok := pos[s.ID]; ok {
+			if s.Rev >= out[i].Rev {
+				out[i] = s
+			}
+			continue
+		}
+		pos[s.ID] = len(out)
+		out = append(out, s)
+	}
+	return out
+}
+
 // Load returns every decodable segment of room, oldest first, and how
 // many lines it skipped because they could not be decoded (a torn write
 // after a crash, a hand edit). A room with no transcript yet returns nil,
@@ -82,7 +103,7 @@ func (s *Store) Load(room string) (segs []caption.Segment, skipped int, err erro
 			}
 		}
 		if errors.Is(err, io.EOF) {
-			return segs, skipped, nil
+			return latest(segs), skipped, nil
 		}
 		if err != nil {
 			return nil, 0, fmt.Errorf("read transcript: %w", err)

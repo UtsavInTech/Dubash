@@ -186,9 +186,9 @@ func (o Options) recognize(ctx context.Context, f RecognizerFactory, r Recording
 }
 
 func (o Options) translate(ctx context.Context, t NamedTranslator, r Recording, audio float64, vocab Vocabulary, dst string, with bool) MTResult {
-	var glossary []string
+	var glossary translate.Glossary
 	if with {
-		glossary = vocab.Keep()
+		glossary = vocab.Glossary(dst)
 	}
 	o.logf("mt   %-24s %-28s %s→%s glossary=%v", r.Name, t.Name, r.Lang, dst, with)
 	out := MTResult{Recording: r.Name, Translator: t.Name, Src: r.Lang, Dst: dst, WithGlossary: with, Audio: audio}

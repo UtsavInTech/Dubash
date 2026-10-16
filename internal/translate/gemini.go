@@ -19,8 +19,8 @@ type Gemini struct {
 }
 
 // Translate implements Translator.
-func (g Gemini) Translate(ctx context.Context, text, src, dst string, glossary []string) (string, error) {
-	return translateWith(ctx, g.generate, text, src, dst, glossary)
+func (g Gemini) Translate(ctx context.Context, text, src, dst string, gl Glossary) (string, error) {
+	return translateWith(ctx, g.generate, text, src, dst, gl)
 }
 
 func (g Gemini) generate(ctx context.Context, system, text string) (string, error) {

@@ -16,9 +16,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/caption"
 	"github.com/UtsavInTech/dubash/internal/config"
 	"github.com/UtsavInTech/dubash/internal/store"
@@ -65,6 +67,9 @@ var (
 	ErrLanguage = errors.New("language not served by this room")
 	// ErrEnded means the event was ended from the panel.
 	ErrEnded = errors.New("the event was ended")
+	// ErrUnknownSegment means the line is not among the recent ones a
+	// correction can reach.
+	ErrUnknownSegment = errors.New("no such line among the recent ones")
 )
 
 // Deps are the pipeline's collaborators, shared by every room.
@@ -134,6 +139,9 @@ type Status struct {
 	FirstCaptionMs int64 `json:"firstCaptionMs"`
 	// Dropped counts lines a language skipped because it fell behind.
 	Dropped map[string]int `json:"dropped,omitempty"`
+	// ContextVersion is the Dictation Bank version in force (0: none).
+	ContextVersion int `json:"contextVersion"`
+	ContextEntries int `json:"contextEntries"`
 }
 
 // Room is one stage.
@@ -141,6 +149,10 @@ type Room struct {
 	cfg  config.Room
 	deps Deps
 	hub  *Hub
+
+	// vocab is the pinned Dictation Bank context, swapped whole when the
+	// admin pins a new version; the live path never reads the bank store.
+	vocab atomic.Pointer[bank.Context]
 
 	mu        sync.Mutex
 	live      bool
@@ -185,6 +197,7 @@ func New(cfg config.Room, deps Deps) (*Room, error) {
 		cfg: cfg, deps: deps, hub: NewHub(ringSize, seed), speaking: cfg.Source, level: asr.DBFS(0),
 		trLat: map[string][]time.Duration{}, dropped: map[string]int{},
 	}
+	r.vocab.Store(bank.NewContext(bank.Version{Event: cfg.ID}, cfg.Glossary))
 	if n := len(seed); n > 0 {
 		last := seed[n-1]
 		for _, s := range seed {
@@ -199,6 +212,87 @@ func New(cfg config.Room, deps Deps) (*Room, error) {
 	}
 	return r, nil
 }
+
+// SetVersion makes v the room's Dictation Bank context, from the next
+// committed line on. rooms.yaml's glossary stays in force beside it.
+func (r *Room) SetVersion(v bank.Version) {
+	r.vocab.Store(bank.NewContext(v, r.cfg.Glossary))
+	r.deps.Log.Info("dictation bank version in force", "room", r.cfg.ID, "version", v.Number, "entries", len(v.Entries))
+}
+
+// Correct replaces the text of a recent committed line: a live word fix
+// from the speaker console. Readers get the new revision at once (a
+// "correction" event, Raw keeping what was recognized); it is translated
+// again into the languages being read, with the current context, and
+// stored. It returns the line before and after. Correcting to the same
+// text changes nothing.
+func (r *Room) Correct(ctx context.Context, id int, text string) (before, after caption.Segment, err error) {
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return before, after, errors.New("the corrected text is empty")
+	}
+	found := false
+	for _, s := range r.hub.Recent() {
+		if s.ID == id {
+			before, found = s, true
+		}
+	}
+	if !found {
+		return before, after, ErrUnknownSegment
+	}
+	if text == before.Text {
+		return before, before, nil
+	}
+	after = before
+	after.Rev = before.Rev + 1
+	if after.Raw == "" {
+		after.Raw = before.Text
+	}
+	after.Text, after.Error, after.Translations = text, "", nil
+	r.hub.Publish(Msg{Event: "correction", Data: after, Segment: id})
+
+	vocab := r.Context()
+	var langs []string
+	for _, l := range r.targets(after.Lang) {
+		if slices.Contains(r.cfg.AlwaysTranslate, l) || r.hub.Reading(l) {
+			langs = append(langs, l)
+		}
+	}
+	stored := after
+	go func() {
+		tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), translateTimeout)
+		defer cancel()
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		var errs []string
+		stored.Translations = map[string]string{}
+		for _, l := range langs {
+			wg.Go(func() {
+				out, err := r.deps.Translator.Translate(tctx, stored.Text, stored.Lang, l, vocab.Glossary(stored.Lang, l))
+				tr := caption.Translation{Room: stored.Room, Segment: id, Epoch: stored.Epoch, Rev: stored.Rev, Lang: l, Text: out}
+				mu.Lock()
+				if err != nil {
+					tr.Text, tr.Error = "", err.Error()
+					errs = append(errs, err.Error())
+				} else {
+					stored.Translations[l] = out
+				}
+				mu.Unlock()
+				r.hub.Publish(Msg{Event: "translation", Lang: l, Data: tr, Segment: id})
+			})
+		}
+		wg.Wait()
+		sort.Strings(errs)
+		stored.Error = strings.Join(errs, "; ")
+		if err := r.deps.Store.Append(stored); err != nil {
+			r.recordError(err.Error())
+		}
+	}()
+	return before, after, nil
+}
+
+// Context returns the Dictation Bank context in force.
+func (r *Room) Context() *bank.Context { return r.vocab.Load() }
 
 // Config returns the room's configuration.
 func (r *Room) Config() config.Room { return r.cfg }
@@ -312,8 +406,11 @@ func (r *Room) Run(ctx context.Context, t Transmission, audio <-chan []byte) err
 	events := make(chan asr.Event, 64)
 	asrErr := make(chan error, 1)
 	go func() {
+		// Recognizers take their hints when a session starts (Sarvam's
+		// keyterms are fixed per session): a version pinned during the
+		// transmission reaches recognition at the next transmission.
 		asrErr <- r.deps.ASR.Run(ctx, asr.Config{
-			Lang: lang, Vocabulary: r.cfg.Glossary, Mode: r.cfg.ASRMode, Prompt: r.cfg.Prompt,
+			Lang: lang, Vocabulary: r.Context().Hints(lang), Mode: r.cfg.ASRMode, Prompt: r.cfg.Prompt,
 		}, metered, events)
 		close(events)
 	}()
@@ -477,7 +574,9 @@ func (r *Room) Status() Status {
 	for l, n := range r.dropped {
 		dropped[l] = n
 	}
+	vocab := r.vocab.Load()
 	return Status{
+		ContextVersion: vocab.Version.Number, ContextEntries: len(vocab.Version.Entries),
 		ID: r.cfg.ID, Title: r.cfg.Title, Speaker: r.cfg.Speaker, Source: r.speaking, Targets: r.targets(r.speaking),
 		Live: r.live, Paused: r.paused, Ended: r.ended, Epoch: r.epoch,
 		Talk: r.talk, TalkTitle: r.talkTitle, Viewers: viewers,
@@ -509,6 +608,9 @@ type pipeline struct {
 type job struct {
 	seg      caption.Segment
 	received time.Time
+	// vocab is the Dictation Bank context current when the line was
+	// committed: a version pinned later applies from the next line.
+	vocab *bank.Context
 }
 
 type result struct {
@@ -544,11 +646,12 @@ func (p *pipeline) active() []string {
 // commit publishes a committed line and queues its translations.
 func (p *pipeline) commit(ctx context.Context, seg caption.Segment) {
 	p.r.hub.Publish(Msg{Event: "final", Data: seg, Segment: seg.ID})
+	vocab := p.r.Context()
 	langs := p.active()
 	p.results <- result{seg: &seg, expect: langs}
 	for _, l := range langs {
 		select {
-		case p.worker(ctx, l) <- job{seg: seg, received: time.Now()}:
+		case p.worker(ctx, l) <- job{seg: seg, received: time.Now(), vocab: vocab}:
 		default:
 			// This language is too far behind: skip the line for it
 			// rather than hold everything else back.
@@ -591,7 +694,9 @@ func (p *pipeline) worker(ctx context.Context, lang string) chan job {
 					if !ok {
 						break gather
 					}
-					if chars += len([]rune(j.seg.Text)) + 1; chars > translate.MaxBatchChars {
+					// A batch shares one glossary: a line committed under a
+					// newly pinned version starts the next batch.
+					if chars += len([]rune(j.seg.Text)) + 1; chars > translate.MaxBatchChars || j.vocab != batch[0].vocab {
 						next = &j
 						break gather
 					}
@@ -613,6 +718,7 @@ func (p *pipeline) translate(ctx context.Context, lang string, batch []job) {
 	tctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), translateTimeout)
 	defer cancel()
 	src := batch[0].seg.Lang
+	glossary := batch[0].vocab.Glossary(src, lang)
 	outs := make([]string, len(batch))
 	errs := make([]error, len(batch))
 	call := func(f func() error) error {
@@ -635,7 +741,7 @@ func (p *pipeline) translate(ctx context.Context, lang string, batch []job) {
 		}
 		var got []string
 		err := call(func() (err error) {
-			got, err = b.TranslateBatch(tctx, lines, src, lang, p.r.cfg.Glossary)
+			got, err = b.TranslateBatch(tctx, lines, src, lang, glossary)
 			return err
 		})
 		switch {
@@ -652,7 +758,7 @@ func (p *pipeline) translate(ctx context.Context, lang string, batch []job) {
 	if !done { // one by one
 		for i, j := range batch {
 			errs[i] = call(func() (err error) {
-				outs[i], err = p.r.deps.Translator.Translate(tctx, j.seg.Text, src, lang, p.r.cfg.Glossary)
+				outs[i], err = p.r.deps.Translator.Translate(tctx, j.seg.Text, src, lang, glossary)
 				return err
 			})
 		}

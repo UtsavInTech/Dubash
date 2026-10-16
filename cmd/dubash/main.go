@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/genai"
 
 	"github.com/UtsavInTech/dubash/internal/asr"
+	"github.com/UtsavInTech/dubash/internal/bank"
 	"github.com/UtsavInTech/dubash/internal/config"
 	"github.com/UtsavInTech/dubash/internal/room"
 	"github.com/UtsavInTech/dubash/internal/store"
@@ -73,6 +75,22 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 
 	site := web.New(rs, st, token, log)
 	site.PublicURL = os.Getenv("PUBLIC_URL")
+	if site.Bank, err = openBank(ctx, log, dataDir); err != nil {
+		return err
+	}
+	defer site.Bank.Close()
+	// Each room starts with its pinned Dictation Bank version. A bank that
+	// cannot be read leaves rooms with rooms.yaml's glossary only: the
+	// control plane must not keep an event from running.
+	for _, rm := range rs {
+		v, ok, err := site.Bank.Pinned(ctx, rm.Config().ID)
+		switch {
+		case err != nil:
+			log.Warn("could not load the pinned dictation bank version", "room", rm.Config().ID, "err", err)
+		case ok:
+			rm.SetVersion(v)
+		}
+	}
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           site.Handler(),
@@ -99,6 +117,22 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		log.Warn("rooms still running at exit", "err", werr)
 	}
 	return err
+}
+
+// openBank opens the Dictation Bank: PostgreSQL at DATABASE_URL, or a JSON
+// file in the data directory.
+func openBank(ctx context.Context, log *slog.Logger, dataDir string) (bank.Store, error) {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		s, err := bank.OpenPG(ctx, url)
+		if err != nil {
+			return nil, err
+		}
+		log.Info("dictation bank: postgresql")
+		return s, nil
+	}
+	path := filepath.Join(dataDir, "bank.json")
+	log.Info("dictation bank: file (set DATABASE_URL for PostgreSQL)", "path", path)
+	return bank.OpenFile(path)
 }
 
 // backends picks the transcription engine and the translator.
