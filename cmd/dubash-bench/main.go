@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -175,6 +176,9 @@ func recognizers(ctx context.Context, names []string, speed float64) ([]bench.Re
 			}
 			e := &asr.Sarvam{Key: key, Model: os.Getenv("SARVAM_ASR_MODEL")}
 			e.Early = os.Getenv("SARVAM_EARLY") == "on"
+			if ms, err := strconv.Atoi(os.Getenv("SARVAM_SILENCE_MS")); err == nil {
+				e.Silence = time.Duration(ms) * time.Millisecond
+			}
 			mode := os.Getenv("SARVAM_ASR_MODE")
 			out = append(out, bench.RecognizerFactory{Name: n, Provider: "sarvam", New: func(bench.Recording, []byte) bench.Recognizer {
 				return bench.EngineRecognizer{Label: "sarvam-stream" + suffix(mode), Engine: modeEngine{e, mode}, Speed: speed}

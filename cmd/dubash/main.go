@@ -230,10 +230,18 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 		if sarvamKey == "" {
 			return nil, nil, nil, errors.New("ASR_PROVIDER=sarvam needs SARVAM_API_KEY")
 		}
-		engine = &asr.Sarvam{
+		s := &asr.Sarvam{
 			Key: sarvamKey, Model: os.Getenv("SARVAM_ASR_MODEL"), Log: log,
 			Early: os.Getenv("SARVAM_EARLY") == "on",
 		}
+		if v := os.Getenv("SARVAM_SILENCE_MS"); v != "" {
+			ms, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("SARVAM_SILENCE_MS: %w", err)
+			}
+			s.Silence = time.Duration(ms) * time.Millisecond
+		}
+		engine = s
 	case "url", "whisper":
 		engine = &asr.Whisper{
 			URL: os.Getenv("ASR_URL"), Model: os.Getenv("ASR_MODEL"), Key: os.Getenv("ASR_API_KEY"),

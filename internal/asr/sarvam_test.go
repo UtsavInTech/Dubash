@@ -163,7 +163,7 @@ func TestSarvamTranscribes(t *testing.T) {
 		t.Errorf("interims %q (duplicates must be dropped)", got)
 	}
 	q := f.query[0]
-	for _, want := range []string{"language_code=hi-IN", "model=saaras%3Av4", "mode=codemix", "silence_duration_ms=500", "keyterms=%5B%22"} {
+	for _, want := range []string{"language_code=hi-IN", "model=saaras%3Av4", "mode=codemix", "silence_duration_ms=300", "keyterms=%5B%22"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("query %q lacks %q", q, want)
 		}

@@ -92,6 +92,23 @@ func (f *fakeModel) Propose(ctx context.Context, in Input, entries []bank.Entry)
 	return f.edits, nil
 }
 
+func TestSoundsAlike(t *testing.T) {
+	for _, c := range []struct {
+		from, to string
+		want     bool
+	}{
+		{"राम जी के हाथों", "राम कथा के हाथों", false}, // a correct word swapped for a bank term
+		{"राम खता", "राम कथा", true},
+		{"धीरेंदर किशन", "धीरेंद्र कृष्ण", true},
+		{"डबस", "Dubash", false}, // across scripts: only listed mis-hearings
+		{"apple", "सेब", false},
+	} {
+		if got := soundsAlike(c.from, c.to); got != c.want {
+			t.Errorf("soundsAlike(%q, %q) = %v", c.from, c.to, got)
+		}
+	}
+}
+
 func TestModelEditsAreChecked(t *testing.T) {
 	entries := []bank.Entry{entry("राम कथा", func(e *bank.Entry) { e.Lang = "hi" })}
 	m := &fakeModel{edits: []Edit{
@@ -118,7 +135,7 @@ func TestModelDeadline(t *testing.T) {
 	m := &fakeModel{edits: []Edit{{From: "a", To: "b"}}, wait: time.Second}
 	c := &Corrector{Model: m, Deadline: 50 * time.Millisecond}
 	start := time.Now()
-	r := c.Correct(context.Background(), Input{Lang: "en", Text: "a line", Entries: []bank.Entry{entry("b")}})
+	r := c.Correct(context.Background(), Input{Lang: "en", Text: "a line", Entries: []bank.Entry{entry("line up")}})
 	if !r.TimedOut || r.Text != "a line" || time.Since(start) > 500*time.Millisecond {
 		t.Fatalf("result %+v after %v", r, time.Since(start))
 	}

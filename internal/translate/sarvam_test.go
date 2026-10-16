@@ -296,3 +296,12 @@ func TestGarbled(t *testing.T) {
 		t.Error("English words of a code-mixed line are fine")
 	}
 }
+
+func TestLooping(t *testing.T) {
+	if !Garbled("बा जब रावण ने मारा था तब नहीं तुम प्रकट भए।", "రావణుడి చేతిలో బ్రహ్మదేవుడి చేతిలో బ్రహ్మదేవుడి చేతిలో బ్రహ్మదేవుడి చేతిలో బ్రహ్మదేవుడి చేతిలో", "te") {
+		t.Error("a loop was not caught")
+	}
+	if Garbled("रुको तो रुको तो रुको तो", "ఆగు ఆగు ఆగు అన్నారు", "te") {
+		t.Error("a repetition the speaker made is fine")
+	}
+}

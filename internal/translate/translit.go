@@ -74,11 +74,12 @@ func editDistance(a, b []rune) int {
 	return prev[len(b)]
 }
 
-// Garbled reports an answer that is no translation into an Indian script:
-// src written out in dst's script (see Transliterated), or Latin letters
-// mixed into words when src had none (a half-transliterated "రukiyో").
+// Garbled reports an answer that is no translation: src written out in
+// dst's script (see Transliterated), a phrase repeated in a loop, or Latin
+// letters mixed into words when src had none (a half-transliterated
+// "రukiyో").
 func Garbled(src, out, dst string) bool {
-	if Transliterated(src, out) {
+	if Transliterated(src, out) || looping(src, out) {
 		return true
 	}
 	if dst == "en" || hasLatin(src) {
@@ -95,6 +96,26 @@ func Garbled(src, out, dst string) bool {
 			}
 		}
 		if latin && other {
+			return true
+		}
+	}
+	return false
+}
+
+// looping reports an answer that repeats a phrase of two or more words
+// three times or more where the source does not.
+func looping(src, out string) bool {
+	count := func(s string) map[string]int {
+		w := strings.Fields(s)
+		m := map[string]int{}
+		for i := 0; i+2 <= len(w); i++ {
+			m[w[i]+" "+w[i+1]]++
+		}
+		return m
+	}
+	in := count(src)
+	for k, n := range count(out) {
+		if n >= 3 && in[k] < 3 && n > 2*max(in[k], 1) {
 			return true
 		}
 	}

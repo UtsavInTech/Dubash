@@ -125,21 +125,24 @@ func (c *Corrector) Correct(ctx context.Context, in Input) Result {
 		}
 	}
 
-	// 3. The model, within the deadline.
-	if c != nil && c.Model != nil && (len(in.Entries) > 0 || scriptOK) {
+	// 3. The model, within the deadline, when some bank entry resembles
+	//    words of the line or the script passage is known: otherwise it has
+	//    nothing to go on (and would cost for nothing).
+	rel := relevant(res.Text, in.Entries)
+	if c != nil && c.Model != nil && (len(rel) > 0 || scriptOK) {
 		deadline := c.Deadline
 		if deadline <= 0 {
 			deadline = 800 * time.Millisecond
 		}
 		mctx, cancel := context.WithTimeout(ctx, deadline)
-		edits, err := c.Model.Propose(mctx, Input{Text: res.Text, Lang: in.Lang, Script: ifConf(in.Script, scriptOK), ScriptConf: in.ScriptConf, Previous: in.Previous}, relevant(res.Text, in.Entries))
+		edits, err := c.Model.Propose(mctx, Input{Text: res.Text, Lang: in.Lang, Script: ifConf(in.Script, scriptOK), ScriptConf: in.ScriptConf, Previous: in.Previous}, rel)
 		res.TimedOut = errors.Is(mctx.Err(), context.DeadlineExceeded)
 		cancel()
 		if err == nil {
 			allowed := vocabulary(in.Entries, ifConf(in.Script, scriptOK))
 			for _, e := range edits {
 				e.Rule = "model"
-				if justified(e, allowed) && apply(e) {
+				if justified(e, allowed) && soundsAlike(e.From, e.To) && apply(e) {
 					continue
 				}
 				res.Skipped = append(res.Skipped, e)
@@ -393,6 +396,106 @@ func justified(e Edit, allowed map[string]bool) bool {
 		}
 	}
 	return true
+}
+
+// soundsAlike reports whether the words an edit changes sound like the
+// words it writes: a misrecognition sounds like what was said. "राम जी" →
+// "राम कथा" (a correct word swapped for a bank term) does not. Each changed
+// run of words must be the same script and at least half alike; changes
+// across scripts are left to the bank's listed mis-hearings.
+func soundsAlike(from, to string) bool {
+	a, b := script.Words(from), script.Words(to)
+	for _, op := range wordDiff(a, b) {
+		x, y := strings.Join(a[op[0]:op[1]], ""), strings.Join(b[op[2]:op[3]], "")
+		if x == "" || y == "" {
+			continue // an insertion or deletion: Apply's own rules decide
+		}
+		if !sameScript(x, y) {
+			return false
+		}
+		rx, ry := phonetic(x), phonetic(y)
+		if d := editDistance(rx, ry); 1-float64(d)/float64(max(len(rx), len(ry), 1)) < 0.5 {
+			return false
+		}
+	}
+	return true
+}
+
+// phonetic reduces Indian-script text to how a recognizer may confuse it:
+// any Brahmic script mapped onto Devanagari, aspirated consonants onto
+// plain ones (ख→क, थ→त…), long vowels onto short, nasal marks, nukta and
+// virama dropped. Latin text is lower-cased.
+func phonetic(s string) []rune {
+	var out []rune
+	for _, r := range strings.ToLower(s) {
+		if r >= 0x0980 && r < 0x0D80 {
+			r = r - (r-0x0900)/0x80*0x80 // onto Devanagari's layout
+		}
+		if p, ok := plain[r]; ok {
+			r = p
+		}
+		switch r {
+		case 0x0901, 0x0902, 0x093C, 0x094D: // candrabindu, anusvara, nukta, virama
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsMark(r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// plain maps Devanagari letters onto the ones recognizers confuse them with.
+var plain = map[rune]rune{
+	'ख': 'क', 'घ': 'ग', 'छ': 'च', 'झ': 'ज', 'ठ': 'ट', 'ढ': 'ड', 'थ': 'त', 'ध': 'द', 'फ': 'प', 'भ': 'ब',
+	'ण': 'न', 'श': 'स', 'ष': 'स', 'ई': 'इ', 'ऊ': 'उ', 'ी': 'ि', 'ू': 'ु', 'ै': 'े', 'ौ': 'ो',
+}
+
+// wordDiff returns the changed runs between a and b as [a0, a1, b0, b1].
+func wordDiff(a, b []string) [][4]int {
+	n, m := len(a), len(b)
+	lcs := make([][]int, n+1)
+	for i := range lcs {
+		lcs[i] = make([]int, m+1)
+	}
+	for i := n - 1; i >= 0; i-- {
+		for j := m - 1; j >= 0; j-- {
+			if a[i] == b[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else {
+				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
+			}
+		}
+	}
+	var out [][4]int
+	i, j := 0, 0
+	start := [2]int{-1, -1}
+	flush := func() {
+		if start[0] >= 0 {
+			out = append(out, [4]int{start[0], i, start[1], j})
+			start = [2]int{-1, -1}
+		}
+	}
+	for i < n || j < m {
+		switch {
+		case i < n && j < m && a[i] == b[j]:
+			flush()
+			i++
+			j++
+		case j < m && (i == n || lcs[i][j+1] >= lcs[i+1][j]):
+			if start[0] < 0 {
+				start = [2]int{i, j}
+			}
+			j++
+		default:
+			if start[0] < 0 {
+				start = [2]int{i, j}
+			}
+			i++
+		}
+	}
+	flush()
+	return out
 }
 
 // relevant picks the bank entries worth showing the model for a line: the

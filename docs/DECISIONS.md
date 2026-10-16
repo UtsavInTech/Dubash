@@ -298,3 +298,23 @@ Sarvam's translation of the English (translate.TestProbeUIStrings). The
 meaning matched everywhere; Sarvam used more English loanwords
 (ईवेंट, సెట్టింగ్స్) where ours use native words (कार्यक्रम,
 సెట్టింగ్‌లు), and it made two errors of its own. We keep ours.
+
+### D32. Accuracy first: finals only, with a 300 ms end-of-speech window
+
+Streamed live on the four real clips (references: YouTube drafts),
+committing early from partials (even at phrase boundaries) against
+committing only Sarvam's finals:
+
+| Clip | WER early | WER finals only | first caption, finals only (500 ms) | (300 ms) |
+|---|---|---|---|---|
+| darbar | 14.7% | 10.6% | 18.6 s | 18.6 s, 10.3% |
+| katha (live crowd) | 11.9% | 11.3% | 5.4 s | |
+| pravachan | 16.4% | 10.1% | 8.7 s | |
+| TV9 interview | 13.6% | 6.8% | 12.9 s | 2.2 s, 7.0% |
+
+Partials are rougher than finals, so early commits cost 1 to 7 points.
+Finals only now matches Sarvam's REST accuracy. Shortening Sarvam's
+end-of-speech window to 300 ms (SARVAM_SILENCE_MS) gives finals at the
+speaker's short pauses at no accuracy cost. A speaker who does not pause
+for 300 ms (18 s at the start of the darbar) still arrives in one piece;
+SARVAM_EARLY=on trades accuracy for those cases.

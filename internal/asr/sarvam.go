@@ -36,8 +36,10 @@ const (
 const (
 	// A pause this long ends an utterance. Sarvam's own default is 1000
 	// ms (observed; the docs say 500), which holds a whole paragraph of a
-	// fluent speaker in one utterance.
-	defaultSarvamSilence = 500 * time.Millisecond
+	// fluent speaker in one utterance. At 300 ms a TV9 interview's first
+	// caption came after 2.2 s instead of 12.9 s, with the same word error
+	// (7.0% against 6.8%; darbar 10.3% against 10.6%).
+	defaultSarvamSilence = 300 * time.Millisecond
 	// Words of a partial transcript that stayed the same this long are
 	// committed early once an utterance runs longer than earlyAfter.
 	// Partials are rougher than finals (no punctuation, "दस" for "10",
@@ -72,7 +74,7 @@ type Sarvam struct {
 	Model string // DefaultSarvamModel if empty
 	// StreamType is fast, balanced (Sarvam's default) or simulated.
 	StreamType string
-	// Silence ends an utterance (default 500 ms).
+	// Silence ends an utterance (default 300 ms).
 	Silence time.Duration
 	// Early commits text from partial transcripts before the utterance
 	// ends: sentences that partials already punctuate, and, in utterances
