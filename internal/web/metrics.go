@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/UtsavInTech/dubash/internal/resilience"
 	"github.com/UtsavInTech/dubash/internal/room"
 )
 
@@ -129,6 +130,7 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 	for _, st := range statuses {
 		quantiles(&b, lag, fmt.Sprintf("room=%q", st.ID), st.CommitLag)
 	}
+	resilience.Write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.Write(b.Bytes())
 }
