@@ -134,6 +134,13 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 	site := web.New(rs, st, token, log)
 	site.PublicURL = os.Getenv("PUBLIC_URL")
 	site.Demo = fake
+	// Noise removal for the speaker console (DeepFilterNet3): from a CDN
+	// (DENOISE_URL), else served from DENOISE_DIR.
+	site.DenoiseURL = os.Getenv("DENOISE_URL")
+	site.DenoiseDir = os.Getenv("DENOISE_DIR")
+	if site.DenoiseDir == "" {
+		site.DenoiseDir = "third_party/deepfilternet"
+	}
 	site.TemporaryData = os.Getenv("DUBASH_TEMPORARY_DATA") == "on"
 	site.Catalog = catalog
 	if coordinator == nil {
@@ -356,7 +363,20 @@ func backends(ctx context.Context, log *slog.Logger, fake bool) (asr.Engine, tra
 		}
 		s := &asr.Sarvam{
 			Key: sarvamKey, Model: os.Getenv("SARVAM_ASR_MODEL"), Log: log,
-			Early: os.Getenv("SARVAM_EARLY") == "on",
+			// Lines appear at sentence ends; when the speaker runs on (or
+			// noise hides the pauses) for SARVAM_EARLY_AFTER_MS, default 4 s,
+			// the stable words are committed at the nearest phrase end.
+			// SARVAM_EARLY=off waits for sentence ends only.
+			Early: os.Getenv("SARVAM_EARLY") != "off",
+		}
+		if v := os.Getenv("SARVAM_EARLY_AFTER_MS"); v != "" {
+			ms, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("SARVAM_EARLY_AFTER_MS: %w", err)
+			}
+			s.EarlyAfter = time.Duration(ms) * time.Millisecond
+		} else {
+			s.EarlyAfter = 4 * time.Second
 		}
 		if v := os.Getenv("SARVAM_SILENCE_MS"); v != "" {
 			ms, err := strconv.Atoi(v)

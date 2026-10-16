@@ -195,3 +195,5 @@
 .qr-actions .text-button {min-height:32px;text-align:center;font-size:11px;text-decoration:underline;text-underline-offset:3px;}
 @media(max-width:450px){.qr-actions{width:auto;flex:1;align-items:flex-end;}.qr-actions .text-button{font-size:10px;}.qr-block>span{max-width:85px;}}
 .deployment-notice{font-size:12px;margin:0;padding:10px max(20px,calc((100vw - 1264px)/2));background:#f7ecd8;border-bottom:1px solid #e4d1ac;color:#6b4e21;line-height:1.5;}
+#denoise-status.warn { color: #b4233a; }
+.noise-option small { color: var(--text-2); font-weight: 400; }

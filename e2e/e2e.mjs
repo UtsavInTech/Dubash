@@ -392,6 +392,31 @@ await hp.waitForFunction(() => !document.getElementById('status').classList.cont
   .then(() => check('HTTP console stops cleanly', true)).catch(() => check('HTTP console stops cleanly', false));
 await noWS.close();
 
+// Microphone through DeepFilterNet3: the console loads the model (checked
+// by SHA-256), reports it ready, and routes the live audio through it.
+const dfCtx = await browser.newContext();
+const dp = await dfCtx.newPage();
+dp.on('pageerror', (e) => errors.push(`denoise console: ${e.message}`));
+await sleep(1100);
+const dfLink = await (await get('/api/admin/rooms/hall-hi/publisher-tokens', {
+  method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: '{"hours": 1}',
+})).json();
+await dp.goto(`${BASE}/operator/hall-hi#token=${dfLink.token}`);
+await dp.waitForFunction(() => /ready\./.test(document.getElementById('denoise-status').textContent), null, { timeout: 30000 })
+  .then(() => check('DeepFilterNet3 loads and passes its integrity check', true))
+  .catch(async () => check('DeepFilterNet3 loads and passes its integrity check', false, await dp.textContent('#denoise-status')));
+await dp.click('#start');
+await dp.waitForFunction(() => document.getElementById('status').classList.contains('live'), null, { timeout: 15000 })
+  .then(() => check('microphone goes live through noise removal', true))
+  .catch(async () => check('microphone goes live through noise removal', false, await dp.textContent('#error')));
+check('live audio runs through DeepFilterNet3', await dp.evaluate(() => document.documentElement.dataset.denoise) === 'deepfilternet3',
+  await dp.evaluate(() => document.documentElement.dataset.denoise));
+await sleep(1500);
+check('audio reaches the server after noise removal', await dp.evaluate(() => parseInt(document.getElementById('sent').textContent, 10) >= 1),
+  await dp.textContent('#sent'));
+await dp.click('#stop');
+await dfCtx.close();
+
 // Landing-page sample interactions do not open microphones or call providers.
 const welcome = await ctx.newPage();
 await welcome.goto(BASE);

@@ -94,3 +94,24 @@ body.choosing .viewer-bar, body.choosing #main, body.choosing .downloads, body.c
 .choose .choose-card:focus, .choose .choose-card:focus-visible { background: var(--c-card); color: var(--c-ink); outline: 3px solid var(--c-lav); outline-offset: 2px; box-shadow: none; }
 .choose .choose-card:focus span, .choose .choose-card:focus-visible span { color: var(--c-ink2); }
 .choose-steps { max-width: 560px; margin-left: auto; margin-right: auto; }
+
+/* Compact reading (phones): the newest line is the one that matters. */
+body[data-mode="mobile"] .viewer-bar .header-inner { min-height: 52px; gap: 12px; }
+body[data-mode="mobile"] .viewer-bar .title { font-size: 16px; }
+body[data-mode="mobile"] .controls { padding-top: 6px; padding-bottom: 6px; flex-wrap: nowrap; }
+body[data-mode="mobile"] .langs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+body[data-mode="mobile"] .langs::-webkit-scrollbar { display: none; }
+body[data-mode="mobile"] .langs button { flex-shrink: 0; padding: 6px 14px; font-size: 14px; }
+body[data-mode="mobile"] .controls .button { min-height: 34px; padding: 4px 10px; }
+body[data-mode="mobile"] .stage { padding-top: 14px; padding-bottom: 90px; }
+body[data-mode="mobile"] .welcome { font-size: 14px; margin-bottom: 8px; opacity: .7; }
+body[data-mode="mobile"] #lines p { font-size: .82em; margin: 0; padding: .3em 0; }
+body[data-mode="mobile"] #lines p:nth-last-child(2) { font-size: .92em; opacity: .8; }
+body[data-mode="mobile"] #lines p:last-child { font-size: 1.15em; opacity: 1; padding-top: .45em; }
+body[data-mode="mobile"] #interim { font-size: 1em; opacity: .55; font-style: italic; }
+body[data-mode="mobile"] .demo-notice { font-size: 11px; padding: 8px 12px; margin-bottom: 10px; }
+body[data-mode="mobile"] .downloads { padding: 10px 16px; font-size: 13px; opacity: .8; }
+body[data-mode="mobile"] .downloads h2 { font-size: 13px; margin: 0 0 4px; }
+body[data-mode="mobile"] .downloads h3 { display: none; }
+body[data-mode="mobile"] .downloads ul { display: inline-flex; gap: 10px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 600px) { body[data-mode="mobile"] .controls .actions .button#listen span { display: none; } }

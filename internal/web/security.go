@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,11 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		csp := "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self'"
+		if strings.HasPrefix(r.URL.Path, "/operator/") {
+			// The speaker console runs DeepFilterNet3 in WebAssembly, whose
+			// files may come from a CDN (checked by SHA-256 in the page).
+			csp = strings.Replace(csp, "default-src 'self'", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"+s.denoiseOrigin(), 1)
+		}
 		if staffPage(r.URL.Path) {
 			csp += "; frame-ancestors 'none'"
 			h.Set("X-Frame-Options", "DENY")
@@ -333,4 +339,14 @@ func (s *Server) viewerSlot(ip string) (release func(), ok bool) {
 func retryAfter(w http.ResponseWriter, secs int, msg string) {
 	w.Header().Set("Retry-After", strconv.Itoa(secs))
 	http.Error(w, msg, http.StatusServiceUnavailable)
+}
+
+// denoiseOrigin is " https://cdn…" when noise removal loads from another
+// origin, for the console's connect-src.
+func (s *Server) denoiseOrigin() string {
+	u, err := url.Parse(s.DenoiseURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return ""
+	}
+	return " https://" + u.Host
 }

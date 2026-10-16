@@ -13,6 +13,7 @@ COPY --from=build /out/dubash /app/dubash
 COPY --from=build /out/events /app/events
 COPY --from=build --chown=65532:65532 /out/data /data
 COPY rooms.yaml /app/rooms.yaml
+COPY third_party/deepfilternet /app/third_party/deepfilternet
 COPY samples/*.wav /app/samples/
 EXPOSE 8080
 ENTRYPOINT ["/app/dubash", "-addr", ":8080", "-config", "/app/rooms.yaml", "-data", "/data"]

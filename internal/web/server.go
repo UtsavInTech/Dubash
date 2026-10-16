@@ -13,6 +13,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,8 +51,14 @@ type Server struct {
 
 	// PublicURL is the audience-facing base URL (https://subs.example.org)
 	// encoded in QR codes. Empty means the URL the request came in on.
-	PublicURL     string
-	Demo          bool
+	PublicURL string
+	Demo      bool
+	// DenoiseURL is where the speaker console loads DeepFilterNet3 (the
+	// WebAssembly and the model, checked by SHA-256 in the browser): a
+	// CDN, or this server's /models/deepfilternet/ when DenoiseDir holds
+	// the files. Empty with no DenoiseDir: noise removal is off.
+	DenoiseURL    string
+	DenoiseDir    string
 	TemporaryData bool
 
 	// Bank is the Dictation Bank store; nil disables its pages and API.
@@ -125,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	s.sessionRoutes(mux)
 	s.googleRoutes(mux)
 	s.streamRoutes(mux)
+	mux.HandleFunc("GET /models/deepfilternet/{file}", s.denoiseFile)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(s.static)))
 	mux.HandleFunc("GET /{$}", s.page("index.html"))
 	mux.HandleFunc("GET /login", s.page("login.html"))
@@ -249,7 +258,46 @@ func (s *Server) baseURL(r *http.Request) string {
 }
 
 func (s *Server) site(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]string{"url": s.baseURL(r), "demo": strconv.FormatBool(s.Demo), "temporaryData": strconv.FormatBool(s.TemporaryData)})
+	writeJSON(w, map[string]string{"url": s.baseURL(r), "demo": strconv.FormatBool(s.Demo), "temporaryData": strconv.FormatBool(s.TemporaryData), "denoise": s.denoiseBase(r)})
+}
+
+// denoiseBase is the folder the console loads DeepFilterNet3 from.
+func (s *Server) denoiseBase(r *http.Request) string {
+	if s.DenoiseURL != "" {
+		return strings.TrimRight(s.DenoiseURL, "/") + "/"
+	}
+	if s.DenoiseDir != "" {
+		if _, err := os.Stat(filepath.Join(s.DenoiseDir, "df_bg.wasm")); err == nil {
+			return s.baseURL(r) + "/models/deepfilternet/"
+		}
+	}
+	return ""
+}
+
+// denoiseFile serves the noise-removal files: large, immutable (the
+// console checks their SHA-256), so cached for a year.
+func (s *Server) denoiseFile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("file")
+	types := map[string]string{"df_bg.wasm": "application/wasm", "DeepFilterNet3_onnx.tar.gz": "application/gzip"}
+	ct, ok := types[name]
+	if !ok || s.DenoiseDir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	f, err := os.Open(filepath.Join(s.DenoiseDir, name))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	http.ServeContent(w, r, name, st.ModTime(), f)
 }
 
 // qr serves an SVG QR code that opens the room's captions, for the stage

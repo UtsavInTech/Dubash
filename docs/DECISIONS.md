@@ -384,3 +384,16 @@ the reset), so the Apache-2.0 licence and the credit in NOTICE stay, as
 the licence requires; the old history is kept in a local backup branch.
 The Spanish guides, the upstream screenshots and promo video, and the
 dependency-bot configuration were removed.
+
+### D38. Responsiveness over the last points of accuracy, in halls
+
+D32 chose finals only (lines at sentence ends) for accuracy. The first
+real test in a hall showed the cost: with background noise and the
+browser's noise suppression off, the recognizer heard no pauses and
+committed nothing for about a minute, and fluent speakers waited 5–6 s.
+Now the console asks the browser for noise suppression, echo
+cancellation and level control unless "Clean feed from a mixer" is
+ticked, and early commits are on by default after 4 s without a
+sentence end (previously opt-in after 8 s), still cut at phrase ends.
+Early commits cost 1–7 WER points on run-on clips in the benchmark;
+ordinary sentences, which end within 4 s, are unaffected.

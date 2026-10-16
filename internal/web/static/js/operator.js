@@ -1,6 +1,7 @@
 // Modified by the Dubash contributors: English, pause, end of event,
 // listeners per language.
 import { NAMES } from './langs.js';
+import * as denoise from './denoise.js';
 
 const roomId = decodeURIComponent(location.pathname.split('/').pop());
 const params = new URLSearchParams(location.search);
@@ -10,6 +11,11 @@ const EVENT_ENDED = 4001;
 const REVOKED = 4003;
 let languages = [];
 let ready = false;
+// Noise removal (DeepFilterNet3): where to load it from, and whether it is
+// ready. Loaded in the background when the page opens.
+let denoiseBase = '';
+let denoiseAssets = null;
+let dfNode = null;
 
 // A speaker link carries its token in the URL fragment (#token=…), which
 // the browser never sends to a server; the page takes it and removes it
@@ -61,6 +67,33 @@ async function detect() {
   }
 }
 
+// denoiseStatus says how noise removal stands, under the microphone.
+function denoiseStatus(text, warn = false) {
+  const el = $('denoise-status');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('warn', warn);
+}
+
+// prepareDenoise loads DeepFilterNet3 in the background (about 11 MB the
+// first time, then from the browser's cache).
+async function prepareDenoise() {
+  if (!denoiseBase) { denoiseStatus('Background-noise removal: the browser\'s built-in (DeepFilterNet3 is not set up on this server).'); return; }
+  denoiseStatus('Background-noise removal (DeepFilterNet3): getting ready…');
+  try {
+    denoiseAssets = await denoise.load(denoiseBase);
+    denoiseStatus('Background-noise removal (DeepFilterNet3): ready.');
+  } catch (e) {
+    denoiseAssets = null;
+    denoiseStatus(`DeepFilterNet3 unavailable (${e.message}): the browser's built-in noise suppression is used instead.`, true);
+  }
+}
+
+// cleanFeed: the console's "mixer or clean audio" switch (off by default).
+function cleanFeed() {
+  return $('clean-feed')?.checked ?? false;
+}
+
 function toggleFileRow() {
   const isFile = $('source').value === 'file';
   $('file-row').hidden = !isFile;
@@ -97,12 +130,24 @@ async function start() {
   player = $('player');
   if (isFile && !player.src) return fail('Choose an audio file, or press "Find microphones" and pick a microphone from the list.');
 
+  // A microphone goes through DeepFilterNet3 at 48 kHz unless the feed
+  // is clean (a mixer) or the model could not load.
+  const wantDF = !isFile && !cleanFeed() && $('denoise-level').value !== 'off' && denoiseAssets;
   try {
-    ctx = new AudioContext({ sampleRate: 16000 });
+    ctx = new AudioContext({ sampleRate: wantDF ? 48000 : 16000 });
   } catch {
     ctx = new AudioContext(); // the worklet resamples
   }
   await ctx.audioWorklet.addModule('/static/js/pcm-worklet.js');
+  dfNode = null;
+  if (wantDF) {
+    try {
+      dfNode = await denoise.node(ctx, denoiseAssets, Number($('denoise-level').value));
+      dfNode.port.onmessage = (e) => { if (e.data.slow) denoiseStatus('This computer is too slow for full noise removal: some audio is being skipped. Choose "Light" or a faster device.', true); };
+    } catch (e) {
+      denoiseStatus(`Noise removal could not start (${e.message}); using the browser's.`, true);
+    }
+  }
   node = new AudioWorkletNode(ctx, 'pcm-16k', { channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
   const mute = ctx.createGain();
   mute.gain.value = 0;
@@ -114,11 +159,20 @@ async function start() {
     src.connect(ctx.destination); // the operator hears the file
   } else {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { ...($('source').value === 'default' ? {} : { deviceId: { exact: $('source').value } }), channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      // A laptop or phone microphone in a hall needs the browser's noise
+      // suppression, echo cancellation and level control: without them the
+      // recognizer hears no pauses and commits nothing. A clean mixer feed
+      // is better untouched ("Clean feed" in the console).
+      // With DeepFilterNet3 running, the browser keeps only echo
+      // cancellation and level control (two noise suppressors in a row
+      // damage speech).
+      audio: { ...($('source').value === 'default' ? {} : { deviceId: { exact: $('source').value } }), channelCount: 1, ...(cleanFeed() ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : { echoCancellation: true, noiseSuppression: !dfNode, autoGainControl: true }) },
     });
     src = ctx.createMediaStreamSource(stream);
   }
-  src.connect(node);
+  if (dfNode) src.connect(dfNode).connect(node);
+  else src.connect(node);
+  document.documentElement.dataset.denoise = dfNode ? 'deepfilternet3' : (isFile || cleanFeed() ? 'none' : 'browser');
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   // A local reference so a socket superseded by stop() (still CONNECTING
@@ -503,6 +557,7 @@ async function main() {
       loadFile(`/samples/${a.dataset.sample}.wav`);
     };
   }
+  fetch('/api/site').then((r) => r.json()).then((site) => { denoiseBase = site.denoise ?? ''; prepareDenoise(); }).catch(() => prepareDenoise());
   $('start').onclick = () => start().catch((e) => fail(e.message));
   $('stop').onclick = stop;
   $('pause').onclick = () => control(paused ? 'resume' : 'pause').catch((e) => { $('error').textContent = e.message; });
