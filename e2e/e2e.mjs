@@ -469,6 +469,51 @@ check('admin workspace fits a phone', await studio.evaluate(() => document.docum
 check('created event is listed for the audience', (await (await get('/api/rooms')).json()).some((r) => r.id === 'frontend-flow-check'));
 await studio.close();
 
+// Know Your Speaker: profile, separate consent, private sample and suggested phrase.
+const speakerPage = await ctx.newPage();
+speakerPage.on('pageerror', (e) => errors.push(`speakers: ${e.message}`));
+await speakerPage.goto(`${BASE}/speakers`);
+await speakerPage.fill('#display-name', 'E2E Speaker');
+await speakerPage.check('[name="language"][value="hi"]');
+await speakerPage.click('#profile-form button[type="submit"]');
+await speakerPage.waitForFunction(
+  () => document.querySelector('#profile-id').value.startsWith('e2e-speaker-'),
+);
+check(
+  'speaker profile saves with a usable slug',
+  (await speakerPage.inputValue('#profile-id')).startsWith('e2e-speaker-'),
+);
+await speakerPage.check('#consent-recognition');
+await speakerPage.check('#consent-storage');
+await speakerPage.check('#consent-terms');
+await speakerPage.click('#save-consent');
+await speakerPage.waitForFunction(() => document.querySelector('#consent-state').textContent.includes('3 consent records'));
+check('recognition, storage and terms are separate recorded choices', await speakerPage.isEnabled('#upload-button'));
+check('synthetic voice remains disabled with its warning', await speakerPage.isDisabled('.disabled-consent input') && (await speakerPage.textContent('.deepfake-warning')).includes('fake speech'));
+check('draft terms and privacy links are available', (await speakerPage.getAttribute('a[href="/terms"]', 'href')) === '/terms' && (await speakerPage.getAttribute('a[href="/privacy"]', 'href')) === '/privacy');
+await speakerPage.fill('#word-term', 'ठठरी बँध जाए');
+await speakerPage.fill('#word-meaning', 'A playful rustic curse');
+await speakerPage.fill('#word-en', 'Damn you!');
+await speakerPage.fill('#word-hi', 'ठठरी बँध जाए');
+await speakerPage.fill('#word-kn', 'ನಿನಗೆ ಶಾಪ ಬೀಳಲಿ');
+await speakerPage.fill('#word-ta', 'உனக்குச் சாபம்');
+await speakerPage.fill('#word-te', 'నీకు శాపం');
+await speakerPage.click('#word-form button[type="submit"]');
+await speakerPage.waitForFunction(() => document.querySelector('#words-list').textContent.includes('ठठरी बँध जाए'));
+check('My words appear as a suggested bank phrase', (await speakerPage.textContent('#words-list')).includes('suggested'));
+const wavData = Buffer.alloc(44 + 16000 * 60 * 2);
+wavData.write('RIFF', 0); wavData.writeUInt32LE(wavData.length - 8, 4); wavData.write('WAVEfmt ', 8);
+wavData.writeUInt32LE(16, 16); wavData.writeUInt16LE(1, 20); wavData.writeUInt16LE(1, 22);
+wavData.writeUInt32LE(16000, 24); wavData.writeUInt32LE(32000, 28); wavData.writeUInt16LE(2, 32);
+wavData.writeUInt16LE(16, 34); wavData.write('data', 36); wavData.writeUInt32LE(wavData.length - 44, 40);
+await speakerPage.locator('#sample-file').setInputFiles({ name: 'one-minute.wav', mimeType: 'audio/wav', buffer: wavData });
+await speakerPage.click('#upload-button');
+await speakerPage.waitForFunction(() => document.querySelector('#samples').textContent.includes('one-minute.wav'), null, { timeout: 15000 });
+check('WAV upload shows server-side signal checks and retention date', (await speakerPage.textContent('#samples')).includes('dBFS') && (await speakerPage.textContent('#samples')).includes('min'));
+await speakerPage.setViewportSize({ width: 390, height: 844 });
+check('speaker studio fits a phone', await speakerPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+await speakerPage.close();
+
 // Metrics after traffic.
 const metrics = await (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).text();
 check("metrics expose rooms and lines", /dubash_room_live\{room="sala-a"\} [01]/.test(metrics) && /dubash_room_segments_total\{room="sala-b"\} [1-9]/.test(metrics));

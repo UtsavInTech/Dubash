@@ -127,3 +127,21 @@ Each should exist as a real recording with a tag:
 - `code-switch`: Hindi and English inside one sentence.
 - `negation`: "this is not free", "we will not record".
 - `noise`: venue noise, a PA system, applause.
+
+### Know Your Speaker (Phase A)
+
+The `speaker` package store contract runs against the JSON store and, when
+`DUBASH_TEST_PG` is set, PostgreSQL. Web tests cover organiser authentication,
+required consent before upload, written-permission enforcement for organiser
+acceptance, rejection of synthetic-voice consent in Phase A, allowed retention
+periods and audio signal checks. The hourly retention pass removes expired
+sample metadata and files. `e2e/e2e.mjs` exercises profile creation, separate
+consent recording, warning/document links, a suggested speaker phrase, WAV
+upload checks and mobile layout.
+
+Voice-sample duration is checked server-side. WAV is decoded with the existing
+`bench.DecodeWAV`; MP3/M4A must contain readable duration metadata and are
+explicitly shown as not analysed. No paid speech or translation provider is
+called by the feature or its tests. Run `go test -race ./...`, `go vet ./...`,
+`staticcheck ./...` (v0.8.2), and `e2e/run.sh` when the Go toolchain and browser
+runtime are installed.

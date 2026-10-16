@@ -28,6 +28,7 @@ import (
 	"github.com/UtsavInTech/dubash/internal/correct"
 	"github.com/UtsavInTech/dubash/internal/eventdb"
 	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/speaker"
 	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
 	"github.com/UtsavInTech/dubash/internal/web"
@@ -182,6 +183,16 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 		return err
 	}
 	defer site.Bank.Close()
+	if databaseURL != "" {
+		site.Speakers, err = speaker.OpenPG(ctx, databaseURL)
+	} else {
+		site.Speakers, err = speaker.OpenFile(filepath.Join(dataDir, "speakers.json"))
+	}
+	if err != nil {
+		return err
+	}
+	defer site.Speakers.Close()
+	site.SpeakerDir = filepath.Join(dataDir, "speakers")
 	// Each room starts with its pinned Dictation Bank version. A bank that
 	// cannot be read leaves rooms with rooms.yaml's glossary only: the
 	// control plane must not keep an event from running.

@@ -397,3 +397,19 @@ ticked, and early commits are on by default after 4 s without a
 sentence end (previously opt-in after 8 s), still cut at phrase ends.
 Early commits cost 1–7 WER points on run-on clips in the benchmark;
 ordinary sentences, which end within 4 s, are unaffected.
+
+### D39. Separate speaker consent, recordings and vocabulary from live recognition
+
+Know Your Speaker Phase A stores speaker profiles, immutable consent events,
+private voice samples and suggested vocabulary in a dedicated store. Consent
+choices are recorded separately with document versions and server time.
+Uploads require current recognition, storage and terms consent; they are
+limited to 60 MB per file, 1–15 minutes each and 30 minutes per speaker.
+WAV samples get duration, peak, RMS and frame-energy noise checks; MP3/M4A
+are duration-checked and marked not analysed. Sample files are private
+0600 files under a 0700 data directory and are removed when consent is
+withdrawn or the hourly retention pass reaches their selected 30/90/365-day
+expiry. Speaker vocabulary is saved only as a suggested speaker-scope bank
+entry and must still be approved through the existing bank flow. Synthetic
+voice stays disabled in Phase A. The terms and privacy pages are drafts and
+must be reviewed by a lawyer before public use.

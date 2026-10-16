@@ -30,6 +30,7 @@ import (
 	"github.com/UtsavInTech/dubash/internal/config"
 	"github.com/UtsavInTech/dubash/internal/export"
 	"github.com/UtsavInTech/dubash/internal/room"
+	"github.com/UtsavInTech/dubash/internal/speaker"
 	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
 )
@@ -62,7 +63,10 @@ type Server struct {
 	TemporaryData bool
 
 	// Bank is the Dictation Bank store; nil disables its pages and API.
-	Bank bank.Store
+	Bank            bank.Store
+	Speakers        speaker.Store
+	SpeakerDir      string
+	speakerUploadMu sync.Mutex
 
 	// Prices and Meter estimate each room's cost for the panel and the
 	// metrics. Meter counts a chat translator's tokens; without one,
@@ -160,6 +164,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /samples/", http.StripPrefix("/samples/", http.FileServer(http.Dir("samples"))))
 	s.manageRoutes(mux)
 	s.bankRoutes(mux)
+	s.speakerRoutes(mux)
 	return s.secure(mux)
 }
 
