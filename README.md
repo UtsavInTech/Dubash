@@ -23,7 +23,27 @@ language. No app to install.
 
 ![A talk in English reaches every phone in the room, translated to Spanish](docs/screenshots/hero.png)
 
-## What it does
+## Quick start (India)
+
+```bash
+cp .env.example .env            # put SARVAM_API_KEY and ADMIN_TOKEN in it
+set -a; source .env; set +a
+go run ./cmd/dubash             # http://localhost:8080, rooms from rooms.yaml
+```
+
+- Speaker console: `http://localhost:8080/operator/main-hall?token=…`, choose
+  the microphone, **Go live**. **Pause** stops recognition (nothing is
+  captioned or billed) without disconnecting.
+- Audience: scan the QR at `/posters`, or open `/r/main-hall?lang=te`.
+- Admin: `/admin?token=…`: readers and delay per language, pause, end.
+- Without a key: `go run ./cmd/dubash -fake` (scripted captions, including
+  Hindi, Telugu, Kannada and Tamil).
+
+With `SARVAM_API_KEY` set, Sarvam recognizes (saaras:v4, realtime) and
+translates; a language is translated only while someone reads it. See
+[docs/](docs/) for the architecture, decisions, provider notes and tests.
+
+## What it does (upstream Lenguaraz features)
 
 - One **operator page per room** captures a microphone / line-in from the
   sound desk, or plays an audio file, and streams it to the server.

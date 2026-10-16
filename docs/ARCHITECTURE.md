@@ -1,32 +1,37 @@
 # Architecture
 
-## Today (inherited from upstream Lenguaraz, phase 0)
+## Today (after phase 1)
 
 One Go process. Everything below runs in it.
 
 ```
-operator browser ─┐   PCM16 16 kHz over WebSocket (/ingest/{room}, ADMIN_TOKEN)
-dubash-ingest ─┘
+speaker console (browser mic) ─┐   PCM16 16 kHz over WebSocket (/ingest/{room}, ADMIN_TOKEN)
+dubash-ingest (mixer feed)    ─┘
         │
         ▼
-  room.Run (one per live room)
-    meter ──▶ asr.Engine (Gemini Live | Whisper-compatible | Fake)
-                 │ Interim / Final events (asm: sentence commit from interims)
+  room.Run (one per live event; Pause drops audio here, End stops it)
+    meter ──▶ asr.Engine (Sarvam realtime | Gemini Live | Whisper-compatible | Fake)
+                 │ interim (provisional) / final (committed) events
+                 │ assembler: sentence commit, alignment against committed words
                  ▼
-    finals queue ──▶ publishFinal: translate into every target in parallel
-                                   (translate.Translator, hedged)
-                     ──▶ store.Append (JSONL, synchronous)
-                     ──▶ room.Hub.Publish ("final": one Segment, all languages)
+    commit: segment id, stream epoch ──▶ hub "final" (all readers, SSE id)
+         └─▶ per-language worker (only languages being read, plus always_translate)
+                batch the lines waiting ──▶ translate.Translator / Batcher
+                (Sarvam: keep-as-is terms masked, shared rate limiter)
+                ──▶ hub "translation" (readers of that language, SSE id)
+         └─▶ store writer (async, in order, once a line's translations are in)
         │
         ▼
-  room.Hub: ring of last 50 finals + bounded per-viewer channels
-        │  SSE /events/{room}: status, replay, caught-up, interim, final
+  room.Hub: resume buffer of numbered messages, subscribers per language
+        │  SSE /events/{room}?lang=xx: status, replay (or resume after
+        │  Last-Event-ID), caught-up, interim, final, translation
         ▼
-  audience browsers (/r/{room}), projector, OBS overlay
+  phones (/r/{room}), stage screen, OBS overlay
 ```
 
-Configuration: `rooms.yaml` (rooms, source, targets, glossary), env vars
-for provider URLs and keys, one `ADMIN_TOKEN`.
+Configuration: `rooms.yaml` (source, targets, glossary, speaker,
+asr_mode, always_translate), env vars for providers and keys, one
+`ADMIN_TOKEN`. Languages come from `internal/lang`.
 
 ## Target (from the brief)
 

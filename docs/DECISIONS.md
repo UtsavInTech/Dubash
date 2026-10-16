@@ -109,3 +109,101 @@ run recognized "Dubash" correctly with and without it as a keyterm, where
 The git remote `origin` still points at the upstream repository; nothing
 has been pushed. The module path assumes a future
 `github.com/UtsavInTech/dubash` repository.
+
+## Phase 1 (2026-10-16)
+
+### D13. Dialect is kept as spoken (decided by the project owner)
+
+References and captions keep the speaker's dialect and spelling: Bundeli
+forms (रुकियो, भए), ये/यह as said. Nothing is standardized, in the
+benchmark references or in the product.
+
+### D14. Sarvam commits finals only, by default
+
+Sarvam's partial transcripts are rougher than its finals: no
+punctuation, "दस" where the final has "10", run-together words, and
+words the final corrects. Committing from them (stable words in long
+utterances, or sentences a partial happens to punctuate) raised word
+error by 1 to 13 points on our Hindi clips and, before the alignment
+fix (D15), duplicated text. So the default commits only Sarvam's
+utterance finals, which arrive 0.1–0.25 s after the speaker pauses
+(p95 0.3 s on real speech). The cost: a long utterance (we measured up
+to 18 s in a fast interview) reaches the audience only when it ends.
+`SARVAM_EARLY=on` trades accuracy for latency. **Open for the owner:**
+which to prefer, ideally decided on recordings of a real pilot speaker.
+
+### D15. Committed text is found by alignment, not by counting
+
+The upstream assembler skipped already-committed text in a later
+interim or final by counting words and sentences. Sarvam's finals split
+sentences differently from its partials and revise earlier words, which
+repeated a sentence and dropped a word on a TV9 interview. Committed
+words are now located by edit distance (characters first, so "मुख्यवक्ता"
+matches "मुख्य वक्ता"), searching a few words around their count. The
+Gemini engine uses the same code; its tests pass unchanged.
+
+### D16. One message per line, then one per translation
+
+Upstream sent a line once, with every translation inside, after the
+slowest translation. Now the committed line goes out at once and each
+translation follows as its own `translation` event, only to readers of
+that language. Brief section 3 asks for exactly this; it changed the SSE
+protocol, so the upstream tests that read translations from the final
+event were rewritten (same checks, new messages), and the 49 upstream
+browser checks pass against the new viewer.
+
+### D17. Translate only languages being read, with an export escape hatch
+
+A language is translated while at least one viewer reads it. Rooms may
+list `always_translate` languages, translated regardless, so their
+transcript export is complete. Lines spoken while nobody read a
+language stay untranslated in it; a viewer who switches language sees
+them as "(not translated)". **Open for the owner:** whether to
+translate the last few lines when a language gains its first reader.
+
+### D18. Batching and a burst-tolerant limiter for Sarvam's rate limit
+
+Sarvam Starter allows 60 translate requests a minute per account. With
+one request per line per language and a limiter spacing requests a
+second apart, a five-sentence utterance in three languages waited up
+to 15 s. Each language's worker now sends the lines already waiting in
+one request (Sarvam keeps one output line per input line), and the
+limiter lets a tenth of the minute's budget go at once. Measured on the
+same live test: translation delay p50 1.0–2.0 s, p95 2.3–4.5 s (was
+4.7–6.7 s and 13.5–15.6 s). Context from neighbouring lines also fixed a
+wrong word sense (शर्त: "conditions" became "bet"). A busy event with
+four or more languages still needs Sarvam's Pro plan.
+
+### D19. Keep-as-is terms are masked with placeholders for Sarvam
+
+Sarvam translate has no glossary. Keep-as-is terms are replaced by
+"[n]" before the call and restored after; Sarvam kept all seven
+placeholder shapes tried in hi, te and kn. A translation that loses a
+placeholder is redone unmasked, so no word is lost. A placeholder hides
+what the term is (a person, a product), which can change the grammar
+around it; acceptable for names and brands.
+
+### D20. Indian scripts: Noto Sans subsets in the binary
+
+Inclusive Sans has no Indian scripts. Noto Sans subsets for nine
+scripts (Google Fonts, SIL OFL) are embedded, 830 KB in all, under one
+family with unicode ranges, so a phone downloads only the scripts on
+screen (34–124 KB each); characters several subsets share (danda, ₹)
+are left to Devanagari, or a Hindi line also pulled the Punjabi font.
+The UI strings for Hindi, Telugu, Kannada and Tamil were written by us
+and **need review by native speakers** before a pilot.
+
+### D21. Pause discards audio before recognition
+
+Pause keeps the speaker's connection but sends nothing to the
+recognizer: nothing said is captioned, stored or billed. The Sarvam
+session pings while idle. End stops the transmission with WebSocket
+close code 4001, which `dubash-ingest` and the console treat as final
+(no reconnect), and readers see an ended page.
+
+### D22. The browser suite keeps its own rooms file
+
+`rooms.yaml` is now an Indian example (Hindi main hall, English hall B).
+The E2E suite runs with `e2e/rooms.yaml`, the upstream Spanish/English
+rooms plus a Hindi room, so the upstream checks keep testing what they
+were written for.

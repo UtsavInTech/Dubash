@@ -2,15 +2,41 @@
 
 ## Suites
 
-| Suite | Command | Phase 0 result (2026-10-16, macOS arm64, Go 1.27.2) |
+| Suite | Command | Result (2026-10-16, end of phase 1, macOS arm64, Go 1.27.2) |
 |---|---|---|
-| Go unit and integration tests | `go test -race ./...` | All 10 tested packages pass (8 upstream + `internal/bench`) |
+| Go unit and integration tests | `go test -race ./...` | All 11 tested packages pass |
 | Vet / format | `go vet ./...`, `gofmt -l .` | Clean |
-| Browser end to end | `(cd e2e && npm ci && npx playwright install chromium && ./run.sh)` | 49 passed, 0 failed |
+| Browser end to end | `(cd e2e && npm ci && npx playwright install chromium && ./run.sh)` | 59 passed, 0 failed (49 upstream + 10 for a Hindi event read in Telugu) |
 | Fake server smoke | `ADMIN_TOKEN=x go run ./cmd/dubash -fake`, then `head -c 384000 /dev/zero \| go run ./cmd/dubash-ingest -room sala-a -token x -realtime` | Interims, finals with translations, SRT export and metrics all work |
 | staticcheck | `go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...` | Fails locally under Go 1.27 (tool too old for its export data); CI runs it on Go 1.26 |
 
-The e2e suite needs port 8080 free.
+The e2e suite needs port 8080 free and uses `e2e/rooms.yaml`.
+
+### Rules with tests (phase 1)
+
+| Rule | Test |
+|---|---|
+| Committed line published before its translation | `room.TestRoomPublishesSourceLineBeforeTranslation` |
+| Translate once per line per language, only languages read (plus always_translate) | `room.TestRoomTranslatesOnlyLanguagesBeingRead` |
+| A slow or failing language holds back nothing; every language in order | `room.TestRoomIsolatesLanguages` |
+| Waiting lines batched; fallback line by line | `room.TestRoomBatchesWaitingLines` |
+| Resume after Last-Event-ID; stale ids replay | `room.TestHubResumesAfterTheLastIDSeen`, `web.TestEventsResumeFromLastEventID` |
+| Pause keeps audio from the recognizer | `room.TestPauseKeepsAudioFromTheRecognizer` |
+| End stops the transmission; ingest told not to reconnect | `room.TestEndStopsTheTransmission`, `web.TestPauseResumeEnd` |
+| Danda ends sentences; run-on limits in characters | `asr.TestSentenceEndsDanda`, `asr.TestRunOnCutCountsCharacters` |
+| Committed text aligned, not counted, against rewritten finals | `asr.TestFinalAlignsRewrittenWords` |
+| Sarvam: reconnect keeps text and audio, fatal errors stop, pings while idle | `asr.TestSarvam*` |
+| Keep-as-is terms masked and restored, lost placeholder retried | `translate.TestMaskUnmask`, `translate.TestSarvamTranslator` |
+
+### Live checks against real providers (manual, cost money)
+
+```bash
+set -a; source .env; set +a
+go run ./cmd/sarvam-smoke -lang hi-IN -mode codemix < clip.pcm      # raw realtime messages
+SARVAM_PROBE=1 go test -run ProbeSarvam -v ./internal/translate    # placeholder and line-break probes
+SARVAM_REPLAY=capture.txt go test -run ReplaySarvam -v ./internal/asr  # replay a capture offline
+go run ./cmd/dubash-bench -asr sarvam-stream -translate '' -only hi-   # streaming accuracy and latency
+```
 
 ## Benchmark (`cmd/dubash-bench`)
 

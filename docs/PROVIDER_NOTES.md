@@ -101,6 +101,35 @@ What the disagreements are, from a word diff (about 22–29 per clip):
 - The domain vocabulary (`bench/vocab/bageshwar.yaml`, 23 terms) changed nothing measurable: every bank term present in the drafts was already recognized without it.
 - REST latency per ~28 s clip: 0.5–0.8 s median, under 1 s p95.
 
+### Realtime streaming, tested (2026-10-16)
+
+With `cmd/sarvam-smoke` and the adapter (`internal/asr/sarvam.go`):
+
+- Messages are flat JSON with an `event` field, as the API reference shows. `transcript.partial` is **cumulative for the utterance and unpunctuated**, and most partials arrive twice; partials come in bursts about once a second. `transcript.final` is punctuated and arrives 0.1–0.25 s after `vad.speech_end`. With `return_timestamps=true` finals carry `start_s`/`end_s` (numbers, though the docs show strings).
+- The server's default `silence_duration_ms` is **1000**, not the documented 500; we send 500. Real speech then gives utterances of 1–18 s (a fast interview), synthetic TTS one 12 s utterance.
+- After `{"event":"end"}` the server sends the last final and `session.end` (with billed `audio_duration_s`) but **does not always close the socket**: the client closes it.
+- Partials sometimes do carry punctuation in long, fast utterances.
+- `mode=codemix` works on the realtime endpoint with saaras:v4.
+- Streaming vs REST, against YouTube draft references (finals only): pravachan 11.4% WER (REST 9.8%), darbar 11.6% (10.3%), katha 10.5% (9.9%), TV9 interview 23.1% before the alignment fix; replaying its capture after the fix gives the same 415 words as Sarvam's own finals. REST had also dropped two sentences of the interview that streaming kept.
+- Synthetic Hindi announcement: 0.0% WER streaming (REST 3.2%).
+
+### Translate, tested live (2026-10-16)
+
+60 s of Hindi (pravachan clip) through the server, read in English,
+Telugu and Kannada, Tamil not read (and not translated): 16 lines, no
+errors, commit lag p50 0.1 s. With batching: translation delay p50
+1.0–2.0 s, p95 2.3–4.5 s. Single newlines are kept, one output line per
+input line (5 of 5 in en, te, kn); a double newline came back merged in
+te and kn.
+
+Errors seen in the output, all of the kind the Dictation Bank targets:
+
+- an invented name: राम कथा → "రామాచార్యుల కథ" (the story of Ramacharya);
+- an invented word: "How are you my dear big brother?" → "…అక్కా పెద్దన్నా" (adds "elder sister");
+- a domain term: चोला (cloth offered to Hanuman) → "దండ" (garland);
+- Bundeli-heavy lines translated loosely;
+- "दोस्तों" given a feminine plural in te and kn (earlier test).
+
 ### Not yet verified (needs a test)
 
 - Accuracy on real Indian conference speech, Hinglish especially (benchmark pending recordings).
