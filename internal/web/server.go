@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -507,7 +508,9 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	defer s.sessions.Done()
 	// The browser console sends its token as a subprotocol; answer with
 	// ours so the browser accepts the connection.
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{wsProto}})
+	// The browser's Origin must be this site. Compare with the public
+	// address, not the raw Host: a TLS proxy may pass "name:443".
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{wsProto}, OriginPatterns: s.sameSite(r)})
 	if err != nil {
 		return // Accept already wrote the HTTP error
 	}
@@ -708,4 +711,13 @@ func (s *Server) newTalk(w http.ResponseWriter, r *http.Request) {
 	n := rm.NewTalk(title)
 	s.log.Info("new talk", "room", rm.Config().ID, "talk", n, "title", title)
 	writeJSON(w, map[string]any{"talk": n, "title": title})
+}
+
+// sameSite is the origin pattern of this site for WebSocket checks: the
+// public host, as baseURL works it out.
+func (s *Server) sameSite(r *http.Request) []string {
+	if u, err := url.Parse(s.baseURL(r)); err == nil && u.Host != "" {
+		return []string{u.Host}
+	}
+	return nil
 }

@@ -143,3 +143,51 @@
 
 /* The page behind the canvas (app.css paints html dark in some themes). */
 html:has(body.workspace) { background: #f4f1ec; }
+
+/* View QR dialog. */
+.workspace .qr-dialog { width: min(480px, calc(100vw - 32px)); text-align: center; }
+.workspace .qr-dialog #qr-large { display: block; width: min(360px, 100%); height: auto; margin: 18px auto 10px; border-radius: 18px; background: #fff; padding: 14px; box-shadow: 0 16px 40px -24px #1c193066; }
+.workspace .qr-link { font-size: 14px; color: var(--text-2); word-break: break-all; margin: 0 0 8px; }
+.workspace .qr-dialog .dialog-footer { justify-content: center; gap: 10px; }
+.workspace #event-qr { cursor: zoom-in; }
+
+/* Vocabulary (Dictation Bank) inside the studio. */
+.bank-page .page-heading { align-items: flex-start; }
+.bank-page .bank-intro { max-width: 760px; }
+.bank-page .bank-key { margin: -6px 0 22px; font-size: 14px; color: var(--text-2); }
+.bank-page .bank-key summary { cursor: pointer; }
+.bank-page .bank-key .field { margin: 12px 0 0; max-width: 360px; }
+.bank-page h2 { font-size: 22px; letter-spacing: -0.03em; margin: 42px 0 12px; display: flex; align-items: baseline; gap: 10px; }
+.bank-page h2 .hint { font-size: 14px; font-weight: 500; }
+.bank-page .hint { color: var(--text-2); font-size: 14px; line-height: 1.6; max-width: 760px; }
+.bank-page .toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin: 14px 0; }
+.bank-page .field { display: grid; gap: 6px; margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.bank-page .field.wide { flex: 1 1 100%; }
+.bank-page input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), .bank-page select, .bank-page textarea {
+  min-height: 44px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--canvas);
+  padding: 8px 14px; font: 15px var(--sans, inherit); color: var(--text);
+}
+.bank-page textarea { min-height: 72px; resize: vertical; }
+.bank-page input:focus, .bank-page select:focus, .bank-page textarea:focus { outline: 3px solid #7c6cf233; border-color: var(--lav); }
+.bank-page input[type="file"] { font-size: 14px; }
+.bank-page .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.bank-page .table-wrap { border: 1px solid var(--border); border-radius: var(--r-md); overflow: auto; background: var(--canvas); }
+.bank-page table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.bank-page th, .bank-page td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.bank-page thead th { background: var(--surface); color: var(--text-2); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.bank-page tbody tr:last-child td { border-bottom: 0; }
+.bank-page tbody tr:hover td { background: #faf8ff; }
+.bank-page .sub { display: block; color: var(--text-2); font-size: 12px; margin-top: 2px; }
+.bank-page .button { min-height: 40px; padding: 0 18px; font-size: 14px; border-radius: 999px; }
+.bank-page .button.small { min-height: 32px; padding: 0 14px; font-size: 13px; }
+.bank-page .button:not(.secondary) { background: var(--primary); color: #fff; border-color: transparent; }
+.bank-page #add, .bank-page #script-form [type="submit"], .bank-page #r-run { background: var(--glow); }
+.bank-page .script-card, .bank-page #rehearsal > * { border: 1px solid var(--border); border-radius: var(--r-md); padding: 16px 20px; background: var(--surface); margin-top: 12px; }
+.bank-page .link-list { list-style: none; padding: 0; display: grid; gap: 8px; }
+.bank-page .link-list li { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 14px; background: var(--surface); font-size: 14px; }
+.bank-page .checkbox { display: flex; gap: 10px; align-items: center; font-size: 14px; margin: 10px 0; }
+.bank-page fieldset { border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px 16px; margin: 14px 0; }
+.bank-page dialog.settings { width: min(720px, calc(100vw - 32px)); padding: 28px 30px; background: var(--canvas); color: var(--text); }
+.bank-page .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.bank-page .dialog-head h2 { margin: 0; }
+.bank-page .error { color: #b4233a; }

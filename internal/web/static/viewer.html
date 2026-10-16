@@ -31,6 +31,28 @@
 
   <p class="screen-tag only-screen"><b id="screen-title"></b></p>
 
+  <!-- First visit without a language: welcome, then choose (viewer.js). -->
+  <section id="choose" class="choose only-mobile" hidden aria-labelledby="choose-title">
+    <div class="choose-hero">
+      <span id="choose-live" class="choose-live">Live captions</span>
+      <h1 id="choose-title"></h1>
+      <p id="choose-speaker"></p>
+    </div>
+    <ol class="choose-steps">
+      <li><b>1</b><span>Choose your language</span></li>
+      <li><b>2</b><span>Read the speaker live</span></li>
+      <li><b>3</b><span>Make the text bigger anytime</span></li>
+    </ol>
+    <div class="choose-body">
+      <h2>Which language do you read? <span lang="hi">· अपनी भाषा चुनें</span></h2>
+      <div id="choose-suggested"></div>
+      <label class="choose-search" id="choose-search-row" hidden><span class="visually-hidden">Find your language</span>
+        <input id="choose-search" type="search" placeholder="Find your language… (e.g. Telugu, తెలుగు)" autocomplete="off"></label>
+      <div id="choose-list" class="choose-list" role="list"></div>
+      <p class="choose-note">You can change the language later from the bar at the top. No app or sign-up needed.</p>
+    </div>
+  </section>
+
   <main id="main" class="stage">
  <p id="deployment-mode" class="demo-notice only-mobile" role="status" hidden></p>
     <section id="captions" data-i18n-label="captions">

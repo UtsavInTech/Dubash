@@ -1,4 +1,4 @@
-import { NAMES } from './langs.js';
+import { NAMES, ENGLISH } from './langs.js';
 
 const MAX_LINES = { mobile: 500, screen: 3, overlay: 2 };
 
@@ -347,6 +347,7 @@ function renderLangs() {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = NAMES[l] ?? l;
+    b.title = ENGLISH[l] ?? l;
     b.lang = l;
     b.setAttribute('aria-pressed', String(l === lang));
     b.onclick = () => {
@@ -445,6 +446,12 @@ async function main() {
     await askPIN();
     canExport = (await (await fetch(`/api/rooms/${encodeURIComponent(roomId)}/access`)).json()).exports;
   }
+  // Someone arriving from a QR code or a shared link chooses first.
+  if (mode === 'mobile' && !params.has('lang')) {
+    lang = await chooseLanguage([room.source, ...room.targets]);
+    params.set('lang', lang);
+    history.replaceState(null, '', `?${params}`);
+  }
   wirePrefs();
   wireFollow();
   wireListen();
@@ -456,6 +463,60 @@ async function main() {
   connect();
   // Pending lines turn into "not translated" when their time is up.
   setInterval(() => { if ([...segments.values()].some((s) => s.live)) renderLines(); }, 5000);
+}
+
+// suggestedLang is the reader's own language when the event has it.
+function suggestedLang(langs) {
+  for (const l of navigator.languages ?? []) {
+    const code = l.slice(0, 2).toLowerCase();
+    if (langs.includes(code)) return code;
+  }
+  return '';
+}
+
+// chooseLanguage shows the welcome screen and resolves with the language
+// the reader picks: their device's language first, then every language
+// of the event by its own name and its English name.
+function chooseLanguage(langs) {
+  return new Promise((resolve) => {
+    const box = $('choose');
+    $('choose-title').textContent = room.title;
+    $('choose-speaker').textContent = room.speaker ? `with ${room.speaker}` : 'Captions in your language, on your phone';
+    $('choose-live').textContent = room.live ? '● Live now' : 'Live captions';
+    $('choose-live').classList.toggle('is-live', !!room.live);
+    const card = (l, big = false) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = big ? 'choose-card is-suggested' : 'choose-card';
+      b.lang = l;
+      b.dataset.lang = l;
+      b.dataset.search = `${NAMES[l] ?? ''} ${ENGLISH[l] ?? ''} ${l}`.toLowerCase();
+      const own = document.createElement('strong');
+      own.textContent = NAMES[l] ?? l;
+      const en = document.createElement('span');
+      en.textContent = big ? `${ENGLISH[l] ?? l} · suggested for you` : (ENGLISH[l] ?? l);
+      en.lang = 'en';
+      b.append(own, en);
+      b.onclick = () => {
+        box.hidden = true;
+        document.body.classList.remove('choosing');
+        resolve(l);
+      };
+      return b;
+    };
+    const mine = suggestedLang(langs);
+    $('choose-suggested').replaceChildren(...(mine ? [card(mine, true)] : []));
+    $('choose-list').replaceChildren(...langs.filter((l) => l !== mine).map((l) => card(l)));
+    if (langs.length > 6) {
+      $('choose-search-row').hidden = false;
+      $('choose-search').oninput = (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        for (const b of $('choose-list').children) b.hidden = q !== '' && !b.dataset.search.includes(q);
+      };
+    }
+    document.body.classList.add('choosing');
+    box.hidden = false;
+  });
 }
 
 // askPIN shows the PIN form and resolves once the server accepts a PIN.

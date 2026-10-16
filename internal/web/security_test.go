@@ -371,3 +371,34 @@ func TestRetentionAndDelete(t *testing.T) {
 		t.Errorf("after delete: %+v", segs)
 	}
 }
+
+// Behind Zoho the host arrives as "name:443" while the browser's Origin is
+// "https://name": the console must still connect.
+func TestIngestBehindTLSProxyHostWithPort(t *testing.T) {
+	_, srv := secureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ingest/open"
+	h := http.Header{}
+	h.Set("Origin", "https://captions.example.org")
+	c, resp, err := websocket.Dial(ctx, ws, &websocket.DialOptions{
+		Host:         "captions.example.org:443",
+		HTTPHeader:   h,
+		Subprotocols: []string{"dubash", "dubash-token." + adminTok},
+	})
+	if err != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		t.Fatalf("console behind the proxy could not connect: %v (HTTP %d)", err, status)
+	}
+	c.Close(websocket.StatusNormalClosure, "")
+	// Another site still may not open the console's socket.
+	h.Set("Origin", "https://evil.example.com")
+	if c, _, err := websocket.Dial(ctx, ws, &websocket.DialOptions{Host: "captions.example.org:443", HTTPHeader: h,
+		Subprotocols: []string{"dubash", "dubash-token." + adminTok}}); err == nil {
+		c.CloseNow()
+		t.Error("a cross-site page opened the console socket")
+	}
+}

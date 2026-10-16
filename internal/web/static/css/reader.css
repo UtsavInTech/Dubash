@@ -52,3 +52,45 @@ body[data-mode="mobile"] .demo-notice { border-left: 0; border-radius: 18px; }
 :root:not([data-theme]) body[data-mode="mobile"] .langs button[aria-pressed="true"] { background: #1c1930; border-color: #1c1930; color: #fff; }
 :root:not([data-theme]) body[data-mode="mobile"] .demo-notice { background: var(--dubash-lav-soft); color: #3f31b0; }
 }
+
+/* Welcome and language choice (first visit from a QR code or link). */
+body.choosing .viewer-bar, body.choosing #main, body.choosing .downloads, body.choosing #follow { display: none !important; }
+.choose { --c-bg: #fbf8f4; --c-card: #fff; --c-ink: #1c1930; --c-ink2: #6a6580; --c-line: #ebe7ef; --c-lav: #7c6cf2;
+  min-height: 100vh; background: var(--c-bg); color: var(--c-ink); padding-bottom: 40px; }
+:root[data-theme="dark"] .choose, :root[data-theme="contrast"] .choose { --c-bg: var(--bg); --c-card: var(--surface); --c-ink: var(--text); --c-ink2: var(--text-2, var(--text)); --c-line: var(--border); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .choose { --c-bg: #0f0e18; --c-card: #1b1930; --c-ink: #f4f2ff; --c-ink2: #b9b4d4; --c-line: #2c2946; } }
+.choose[hidden] { display: none; }
+.choose-hero {
+  position: relative; min-height: 300px; display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 24px 20px 26px; color: #fff; border-radius: 0 0 32px 32px; overflow: hidden;
+  background: linear-gradient(0deg, #0d1330e6 0%, #0d133066 45%, #0d133000 70%), url("/static/img/hero-india.jpg") 62% 30% / cover no-repeat, #3b2f7a;
+}
+.choose-hero h1 { font-size: clamp(30px, 8vw, 44px); line-height: 1.08; letter-spacing: -0.035em; margin: 10px 0 6px; font-weight: 600; }
+.choose-hero p { margin: 0; color: #e6e2ff; font-size: 16px; }
+.choose-live { align-self: flex-start; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: #ffffff26; backdrop-filter: blur(8px); }
+.choose-live.is-live { background: #12a594; }
+.choose-steps { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 16px 6px; padding: 0; }
+.choose-steps li { display: grid; gap: 6px; justify-items: center; text-align: center; font-size: 13px; color: var(--c-ink2); line-height: 1.3; }
+.choose-steps b { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 14px;
+  background: linear-gradient(100deg, #7c6cf2, #b78cf7 45%, #f2765f); }
+.choose-body { max-width: 560px; margin: 0 auto; padding: 18px 16px 0; }
+.choose-body h2 { font-size: 21px; letter-spacing: -0.02em; margin: 8px 0 14px; }
+.choose-body h2 span { color: var(--c-ink2); font-weight: 500; font-size: 17px; }
+.choose-card {
+  width: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; text-align: left;
+  min-height: 60px; padding: 14px 20px; border-radius: 20px; border: 1px solid var(--c-line); background: var(--c-card); color: var(--c-ink);
+  font: inherit; cursor: pointer; transition: transform .12s ease, border-color .12s ease;
+}
+.choose-card:hover, .choose-card:focus-visible { border-color: var(--c-lav); transform: translateY(-1px); }
+.choose-card strong { font-size: 22px; font-weight: 600; }
+.choose-card span { font-size: 14px; color: var(--c-ink2); }
+.choose-card.is-suggested { border: 2px solid var(--c-lav); box-shadow: 0 14px 30px -18px #7c6cf2aa; margin-bottom: 18px; min-height: 72px; }
+.choose-card.is-suggested strong { font-size: 26px; }
+.choose-list { display: grid; gap: 10px; }
+.choose-card[hidden] { display: none; }
+.choose-search input { width: 100%; min-height: 50px; border-radius: 16px; border: 1px solid var(--c-line); background: var(--c-card); color: var(--c-ink); padding: 0 16px; font: inherit; margin-bottom: 12px; }
+.choose-note { color: var(--c-ink2); font-size: 14px; margin-top: 18px; text-align: center; }
+@media (min-width: 720px) { .choose-hero { min-height: 380px; padding: 40px max(24px, calc((100vw - 900px) / 2)); } .choose-list { grid-template-columns: 1fr 1fr; } }
+.choose .choose-card:focus, .choose .choose-card:focus-visible { background: var(--c-card); color: var(--c-ink); outline: 3px solid var(--c-lav); outline-offset: 2px; box-shadow: none; }
+.choose .choose-card:focus span, .choose .choose-card:focus-visible span { color: var(--c-ink2); }
+.choose-steps { max-width: 560px; margin-left: auto; margin-right: auto; }

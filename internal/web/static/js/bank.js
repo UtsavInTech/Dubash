@@ -22,7 +22,8 @@ async function api(method, path, body) {
   if (body instanceof URLSearchParams) opts.body = body;
   else if (body) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
   const res = await fetch(path, opts);
-  if (!res.ok) throw new Error(res.status === 401 ? 'Invalid token.' : (await res.text()).trim() || `${res.status}`);
+  if (res.status === 401 && !$('token').value.trim()) { location.replace('/login?next=/bank'); throw new Error('Please sign in.'); }
+  if (!res.ok) throw new Error(res.status === 401 ? 'That access key was not accepted.' : (await res.text()).trim() || `${res.status}`);
   return res.json();
 }
 
@@ -270,3 +271,10 @@ async function refresh() {
 }
 
 refresh();
+
+// Sign out of the organiser session, as in the events studio.
+$('sign-out').onclick = async () => {
+  try { await fetch('/api/session', { method: 'DELETE' }); } catch { /* offline: the cookie expires anyway */ }
+  try { localStorage.removeItem('dubash.token'); } catch { /* Storage unavailable. */ }
+  location.replace('/login');
+};

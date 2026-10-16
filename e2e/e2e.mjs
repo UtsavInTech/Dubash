@@ -83,11 +83,17 @@ check('switch to original language', !orig.startsWith('['), orig);
 check('UI switched to English', (await mob.textContent('#prefs-open')).trim() === 'Settings');
 await mob.waitForFunction(() => document.getElementById('interim').textContent.length > 0, null, { timeout: 8000 }).then(() => check('interim line in original', true)).catch(() => check('interim line in original', false));
 
-// QR link without ?lang follows browser language (pt-BR).
+// QR link without ?lang: a welcome screen asks for the language, with the
+// browser's language (pt-BR) suggested first.
 const qrPage = await phone.newPage();
 await qrPage.goto(`${BASE}/r/sala-a`);
+await qrPage.waitForSelector('#choose:not([hidden]) .choose-card.is-suggested');
+check('QR link asks for the language, suggesting the browser\'s', await qrPage.$eval('.choose-card.is-suggested', (b) => b.lang) === 'pt'
+  && (await qrPage.$$('#choose-list .choose-card')).length === 2 && await qrPage.isHidden('#main'));
+await qrPage.click('.choose-card.is-suggested');
 await qrPage.waitForSelector('#langs button[aria-pressed="true"]');
-check('QR link picks browser language', await qrPage.$eval('#langs button[aria-pressed="true"]', (b) => b.lang) === 'pt');
+check('choosing opens the captions in that language', await qrPage.$eval('#langs button[aria-pressed="true"]', (b) => b.lang) === 'pt'
+  && qrPage.url().includes('lang=pt'));
 await qrPage.close();
 
 // Reading settings: size, contrast, bilingual.

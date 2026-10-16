@@ -89,6 +89,7 @@ async function loadLinks(id) {
   $('copy-audience').disabled = true;
   $('download-qr').disabled = true;
   $('share-qr').disabled = true;
+  $('view-qr').disabled = true;
   if (qrURL) { URL.revokeObjectURL(qrURL); qrURL = null; }
   $('event-qr').removeAttribute('src');
   const room = current();
@@ -115,6 +116,7 @@ async function loadLinks(id) {
     qrURL = URL.createObjectURL(blob); $('event-qr').src = qrURL;
     $('download-qr').disabled = false;
     $('share-qr').disabled = false;
+    $('view-qr').disabled = false;
     const access = await (await fetch(`/api/rooms/${id}/access`, { signal, headers: auth() })).json();
     if (selected !== id) return;
     $('pin-note').hidden = !access.pin;
@@ -139,6 +141,20 @@ function saveQR(file) {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
+// View QR: the code large, to show on a screen or check before printing.
+function viewQR() {
+  const s = current(); if (!s || !qrURL) return;
+  $('qr-title').textContent = s.title;
+  $('qr-large').src = qrURL;
+  $('qr-link').textContent = $('audience-url').value;
+  $('qr-poster').href = `/posters?room=${s.id}`;
+  $('qr-dialog').showModal();
+}
+$('view-qr').onclick = viewQR;
+$('event-qr').onclick = viewQR;
+$('qr-close').onclick = () => $('qr-dialog').close();
+$('qr-dialog').onclick = (e) => { if (e.target === $('qr-dialog')) $('qr-dialog').close(); };
+$('qr-download').onclick = () => $('download-qr').click();
 $('download-qr').onclick = async () => {
   const id = selected; $('download-qr').disabled = true;
   try { saveQR(await qrFile(id)); notify('QR image downloaded. Attach it in WhatsApp or your invitation.'); }
