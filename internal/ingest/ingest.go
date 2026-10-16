@@ -77,10 +77,9 @@ func (o Options) Endpoint() (string, error) {
 		return "", fmt.Errorf("ingest: server url must be http(s), got %q", o.Server)
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/ingest/" + url.PathEscape(o.Room)
+	// The token goes in the Authorization header, never the URL (which
+	// proxies and servers log).
 	q := url.Values{}
-	if o.Token != "" {
-		q.Set("token", o.Token)
-	}
 	if o.Lang != "" {
 		q.Set("lang", o.Lang)
 	}
@@ -118,7 +117,7 @@ func Stream(ctx context.Context, opt Options, src io.Reader) error {
 
 	backoff := minBackoff
 	for {
-		sent, err := session(ctx, endpoint, chunks, log)
+		sent, err := session(ctx, endpoint, opt.Token, chunks, log)
 		switch {
 		case err == nil: // src ended and the room closed cleanly
 			return <-srcErr
@@ -142,9 +141,13 @@ func Stream(ctx context.Context, opt Options, src io.Reader) error {
 
 // session streams chunks over one connection and returns how many it sent.
 // A nil error means chunks was closed and the socket closed normally.
-func session(ctx context.Context, endpoint string, chunks <-chan []byte, log *slog.Logger) (int, error) {
+func session(ctx context.Context, endpoint, token string, chunks <-chan []byte, log *slog.Logger) (int, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	c, resp, err := websocket.Dial(dialCtx, endpoint, nil)
+	var opts *websocket.DialOptions
+	if token != "" {
+		opts = &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + token}}}
+	}
+	c, resp, err := websocket.Dial(dialCtx, endpoint, opts)
 	cancel()
 	if err != nil {
 		if resp != nil {

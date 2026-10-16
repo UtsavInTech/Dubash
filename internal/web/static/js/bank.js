@@ -11,6 +11,10 @@ function storedToken() {
   try { return localStorage.getItem('dubash.token') ?? ''; } catch { return ''; }
 }
 $('token').value = params.get('token') ?? storedToken();
+if (params.has('token')) { // keep the token out of the address bar and history
+  try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ }
+  history.replaceState(null, '', location.pathname);
+}
 $('token').onchange = () => { try { localStorage.setItem('dubash.token', $('token').value); } catch { /* private mode */ } refresh(); };
 
 async function api(method, path, body) {

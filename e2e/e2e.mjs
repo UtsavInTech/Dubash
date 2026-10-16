@@ -21,12 +21,18 @@ const get = async (path, opts) => fetch(BASE + path, opts);
 // ---------- HTTP surface ----------
 check('healthz', (await (await get('/healthz')).text()).trim() === 'ok');
 const rooms = await (await get('/api/rooms')).json();
-check('api/rooms lists 3 rooms', rooms.length === 3, rooms.map((r) => r.id).join(','));
+check('api/rooms lists 4 rooms', rooms.length === 4, rooms.map((r) => r.id).join(','));
 check('admin status needs token', (await get('/api/admin/status')).status === 401);
 check('metrics needs token', (await get('/metrics')).status === 401);
 check('metrics with bearer token', (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).status === 200);
 check('ingest rejects wrong token', (await get('/ingest/sala-a?token=nope')).status === 401);
 check('unknown room viewer 200 (client says not found)', (await get('/r/nope')).status === 200);
+const adminPage = await get('/admin');
+check('staff pages refuse framing and sniffing', adminPage.headers.get('x-frame-options') === 'DENY'
+  && adminPage.headers.get('x-content-type-options') === 'nosniff' && (adminPage.headers.get('content-security-policy') ?? '').includes("default-src 'self'"));
+check('PIN event: captions and QR need the PIN', (await get('/events/hall-pin')).status === 401 && (await get('/qr/hall-pin')).status === 401);
+check('PIN event: transcript is staff only', (await get('/export/hall-pin/txt')).status === 403
+  && (await get('/export/hall-pin/txt', { headers: { Authorization: `Bearer ${TOKEN}` } })).status === 200);
 const qr = await get('/qr/sala-a');
 check('QR is SVG', qr.status === 200 && (qr.headers.get('content-type') ?? '').includes('svg'));
 
@@ -295,8 +301,49 @@ check('the room uses the published version', st.contextVersion === 1 && st.conte
 // Posters.
 const pst = await ctx.newPage();
 await pst.goto(`${BASE}/posters`);
-await pst.waitForSelector('img[src*="/qr/"]');
-check('posters: one QR per room', (await pst.$$('img[src*="/qr/"]')).length === 3);
+await pst.waitForFunction(() => document.querySelectorAll('img[src^="blob:"]').length === 4, null, { timeout: 5000 })
+  .then(() => check('posters: one QR per room, the PIN event\'s too (with the saved admin token)', true))
+  .catch(async () => check('posters: one QR per room, the PIN event\'s too (with the saved admin token)', false,
+    String((await pst.$$('img[src^="blob:"]')).length)));
+
+// Audience PIN: a phone is asked for it, a wrong one is refused.
+const pinPhone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+const pp = await pinPhone.newPage();
+pp.on('pageerror', (e) => errors.push(`pin viewer: ${e.message}`));
+await pp.goto(`${BASE}/r/hall-pin?lang=en`);
+await pp.waitForSelector('.pin-form input');
+await pp.fill('.pin-form input', '000000');
+await pp.click('.pin-form button');
+await pp.waitForFunction(() => document.querySelector('.pin-form .error')?.textContent.length > 0, null, { timeout: 5000 })
+  .then(() => check('PIN: a wrong PIN is refused', true)).catch(() => check('PIN: a wrong PIN is refused', false));
+await pp.fill('.pin-form input', '482193');
+await pp.click('.pin-form button');
+await pp.waitForFunction(() => !document.querySelector('.pin-form'), null, { timeout: 5000 })
+  .then(() => check('PIN: the right PIN opens the captions', true)).catch(() => check('PIN: the right PIN opens the captions', false));
+check('PIN: no download links for an admin-only transcript', await pp.isHidden('.downloads'));
+await pinPhone.close();
+
+// Speaker link: the organiser mints one; the console takes the token from
+// the fragment, goes live, and is cut off when the link is revoked.
+const minted = await (await get('/api/admin/rooms/hall-hi/publisher-tokens', {
+  method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: '{"hours": 1}',
+})).json();
+check('speaker link carries the token in the fragment', minted.console.endsWith(`/operator/hall-hi#token=${minted.token}`));
+check('speaker link cannot read the bank', (await get('/api/admin/bank/entries', { headers: { Authorization: `Bearer ${minted.token}` } })).status === 403);
+const spk = await browser.newContext();
+const sp = await spk.newPage();
+sp.on('pageerror', (e) => errors.push(`speaker console: ${e.message}`));
+await sp.goto(`${BASE}/operator/hall-hi#token=${minted.token}`);
+check('speaker console drops the token from the address bar', !sp.url().includes(minted.token) && (await sp.inputValue('#token')) === minted.token);
+await sp.click('a[data-sample="en"]');
+await sp.click('#start');
+await sp.waitForFunction(() => document.getElementById('status').classList.contains('live'), null, { timeout: 10000 })
+  .then(() => check('speaker link goes live', true)).catch(async () => check('speaker link goes live', false, await sp.textContent('#error')));
+await get('/api/admin/rooms/hall-hi/publisher-tokens/revoke', { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}` } });
+await sp.waitForFunction(() => document.getElementById('error').textContent.includes('revoked'), null, { timeout: 10000 })
+  .then(() => check('revoking cuts the speaker console off, saying why', true))
+  .catch(async () => check('revoking cuts the speaker console off, saying why', false, await sp.textContent('#error')));
+await spk.close();
 
 // Metrics after traffic.
 const metrics = await (await get('/metrics', { headers: { Authorization: `Bearer ${TOKEN}` } })).text();

@@ -17,10 +17,23 @@ function poster(room, base) {
       el('p', { className: 'poster-kicker', textContent: 'Live captions · लाइव कैप्शन' }),
       el('h2', { textContent: room.title }),
       el('p', { className: 'poster-langs', textContent: langs.map((l) => NAMES[l] ?? l).join(' · ') })),
-    el('img', { src: `/qr/${room.id}`, alt: `QR code that opens ${url}`, width: 400, height: 400 }),
+    qrImage(room, url),
     el('p', { className: 'poster-cta', textContent: 'Scan to read the speaker in your language' }),
     el('p', { className: 'poster-alt', textContent: SCAN.filter(([l]) => langs.includes(l)).map(([, s]) => s).join(' · ') }),
     el('p', { className: 'poster-url' }, el('span', { textContent: url }), el('strong', { textContent: 'Dubash' })));
+}
+
+// An event with a PIN gives its QR code (which admits whoever scans it)
+// to staff only: fetch it with the admin token this browser saved.
+function qrImage(room, url) {
+  const img = el('img', { alt: `QR code that opens ${url}`, width: 400, height: 400 });
+  let token = '';
+  try { token = localStorage.getItem('dubash.token') ?? ''; } catch { /* private mode */ }
+  fetch(`/qr/${room.id}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+    .then((b) => { img.src = URL.createObjectURL(b); })
+    .catch(() => { img.alt = 'This event has a PIN: open the admin panel with the admin token first, then this page.'; });
+  return img;
 }
 
 async function main() {

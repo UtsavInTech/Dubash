@@ -66,6 +66,10 @@ func TestParseErrors(t *testing.T) {
 		"duplicate target": "rooms:\n  - id: a\n    source: en\n    targets: [es, fr, es]\n",
 		"huge glossary":    "rooms:\n  - id: a\n    source: en\n    glossary: [" + strings.Repeat("x, ", maxGlossary) + "x]\n",
 		"not yaml":         "rooms: [",
+		"short pin":        "rooms:\n  - id: a\n    source: en\n    audience_pin: \"12\"\n",
+		"letters in pin":   "rooms:\n  - id: a\n    source: en\n    audience_pin: \"12ab\"\n",
+		"bad exports":      "rooms:\n  - id: a\n    source: en\n    exports: everyone\n",
+		"negative days":    "rooms:\n  - id: a\n    source: en\n    retention_days: -1\n",
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -73,5 +77,19 @@ func TestParseErrors(t *testing.T) {
 				t.Fatal("expected an error")
 			}
 		})
+	}
+}
+
+func TestPrivacySettings(t *testing.T) {
+	c, err := Parse([]byte("rooms:\n  - id: a\n    source: hi\n  - id: b\n    source: hi\n    audience_pin: \"4821\"\n    exports: admin\n    store_transcript: false\n    retention_days: 30\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := c.Rooms[0], c.Rooms[1]
+	if !a.Stores() || a.ExportPolicy() != ExportReaders || a.AudiencePIN != "" {
+		t.Errorf("defaults: %+v", a)
+	}
+	if b.Stores() || b.ExportPolicy() != ExportAdmin || b.AudiencePIN != "4821" || b.RetentionDays != 30 {
+		t.Errorf("set: %+v", b)
 	}
 }
