@@ -28,8 +28,8 @@ import (
 	"github.com/UtsavInTech/dubash/internal/correct"
 	"github.com/UtsavInTech/dubash/internal/eventdb"
 	"github.com/UtsavInTech/dubash/internal/room"
-	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/speaker"
+	"github.com/UtsavInTech/dubash/internal/store"
 	"github.com/UtsavInTech/dubash/internal/translate"
 	"github.com/UtsavInTech/dubash/internal/web"
 )
@@ -188,7 +188,9 @@ func run(ctx context.Context, log *slog.Logger, addr, roomsPath, dataDir string,
 	} else {
 		site.Speakers, err = speaker.OpenFile(filepath.Join(dataDir, "speakers.json"))
 	}
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer site.Speakers.Close()
 	site.SpeakerDir = filepath.Join(dataDir, "speakers")
 	// Each room starts with its pinned Dictation Bank version. A bank that

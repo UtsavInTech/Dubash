@@ -63,9 +63,9 @@ type Server struct {
 	TemporaryData bool
 
 	// Bank is the Dictation Bank store; nil disables its pages and API.
-	Bank bank.Store
-	Speakers speaker.Store
-	SpeakerDir string
+	Bank            bank.Store
+	Speakers        speaker.Store
+	SpeakerDir      string
 	speakerUploadMu sync.Mutex
 
 	// Prices and Meter estimate each room's cost for the panel and the

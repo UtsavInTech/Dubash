@@ -476,8 +476,13 @@ await speakerPage.goto(`${BASE}/speakers`);
 await speakerPage.fill('#display-name', 'E2E Speaker');
 await speakerPage.check('[name="language"][value="hi"]');
 await speakerPage.click('#profile-form button[type="submit"]');
-await speakerPage.waitForFunction(() => document.querySelector('#profile-id').value === 'e2e-speaker');
-check('speaker profile saves with a usable slug', (await speakerPage.inputValue('#profile-id')).startsWith('e2e-speaker'));
+await speakerPage.waitForFunction(
+  () => document.querySelector('#profile-id').value.startsWith('e2e-speaker-'),
+);
+check(
+  'speaker profile saves with a usable slug',
+  (await speakerPage.inputValue('#profile-id')).startsWith('e2e-speaker-'),
+);
 await speakerPage.check('#consent-recognition');
 await speakerPage.check('#consent-storage');
 await speakerPage.check('#consent-terms');

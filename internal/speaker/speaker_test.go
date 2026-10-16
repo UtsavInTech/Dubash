@@ -1,5 +1,79 @@
 package speaker
-import("context";"os";"path/filepath";"strconv";"testing";"time")
-func TestFileStoreContract(t *testing.T){runStoreContract(t,func(t *testing.T)Store{s,e:=OpenFile(filepath.Join(t.TempDir(),"speaker.json"));if e!=nil{t.Fatal(e)};return s})}
-func TestPGStoreContract(t *testing.T){url:=os.Getenv("DUBASH_TEST_PG");if url==""{t.Skip("DUBASH_TEST_PG not set")};runStoreContract(t,func(t *testing.T)Store{s,e:=OpenPG(context.Background(),url);if e!=nil{t.Fatal(e)};return s})}
-func runStoreContract(t *testing.T,open func(*testing.T)Store){t.Helper();ctx:=context.Background();s:=open(t);defer s.Close();id:="speaker-test-"+strconv.FormatInt(time.Now().UnixNano(),10);p,e:=s.SaveProfile(ctx,Profile{ID:id,DisplayName:"Test Speaker",Languages:[]string{"hi"},Style:"lecture"});if e!=nil{t.Fatal(e)};if got,e:=s.Profile(ctx,id);e!=nil||got.DisplayName!=p.DisplayName{t.Fatalf("profile=%+v err=%v",got,e)};first:=time.Now().UTC();if _,e=s.AddConsent(ctx,Consent{ProfileID:id,Permission:Recognition,TextVersion:"v1",Granted:true,By:"speaker",At:first});e!=nil{t.Fatal(e)};if _,e=s.AddConsent(ctx,Consent{ProfileID:id,Permission:Recognition,TextVersion:"v1",Granted:false,By:"speaker",At:first.Add(time.Second)});e!=nil{t.Fatal(e)};cs,e:=s.Consents(ctx,id);if e!=nil||len(cs)!=2||!cs[0].Granted||cs[1].Granted{t.Fatalf("consents=%+v err=%v",cs,e)};old:=time.Now().Add(-2*time.Hour);x,e:=s.AddSample(ctx,Sample{ProfileID:id,FileName:"a.wav",FilePath:"/tmp/a.wav",DurationSeconds:61,UploadedAt:old,DeleteAfter:old.Add(time.Hour)});if e!=nil{t.Fatal(e)};xs,e:=s.DeleteExpired(ctx,time.Now());if e!=nil||len(xs)!=1||xs[0].ID!=x.ID{t.Fatalf("expired=%+v err=%v",xs,e)};if xs,e=s.Samples(ctx,id);e!=nil||len(xs)!=0{t.Fatalf("samples=%+v err=%v",xs,e)}}
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strconv"
+	"testing"
+	"time"
+)
+
+func TestFileStoreContract(t *testing.T) {
+	runStoreContract(t, func(t *testing.T) Store {
+		s, e := OpenFile(filepath.Join(t.TempDir(), "speaker.json"))
+		if e != nil {
+			t.Fatal(e)
+		}
+		return s
+	})
+}
+func TestPGStoreContract(t *testing.T) {
+	url := os.Getenv("DUBASH_TEST_PG")
+	if url == "" {
+		t.Skip("DUBASH_TEST_PG not set")
+	}
+	runStoreContract(t, func(t *testing.T) Store {
+		s, e := OpenPG(context.Background(), url)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return s
+	})
+}
+func runStoreContract(t *testing.T, open func(*testing.T) Store) {
+	t.Helper()
+	ctx := context.Background()
+	s := open(t)
+	defer s.Close()
+	id := "speaker-test-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	p, e := s.SaveProfile(ctx, Profile{ID: id, DisplayName: "Test Speaker", Languages: []string{"hi"}, Style: "lecture"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if got, e := s.Profile(ctx, id); e != nil || got.DisplayName != p.DisplayName {
+		t.Fatalf("profile=%+v err=%v", got, e)
+	}
+	first := time.Now().UTC()
+	if _, e = s.AddConsent(ctx, Consent{
+		ProfileID: id, Permission: Recognition, TextVersion: "v1",
+		Granted: true, By: "speaker", At: first,
+	}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.AddConsent(ctx, Consent{
+		ProfileID: id, Permission: Recognition, TextVersion: "v1",
+		Granted: false, By: "speaker", At: first.Add(time.Second),
+	}); e != nil {
+		t.Fatal(e)
+	}
+	cs, e := s.Consents(ctx, id)
+	if e != nil || len(cs) != 2 || !cs[0].Granted || cs[1].Granted {
+		t.Fatalf("consents=%+v err=%v", cs, e)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	x, e := s.AddSample(ctx, Sample{
+		ProfileID: id, FileName: "a.wav", FilePath: "/tmp/a.wav",
+		DurationSeconds: 61, UploadedAt: old, DeleteAfter: old.Add(time.Hour),
+	})
+	if e != nil {
+		t.Fatal(e)
+	}
+	xs, e := s.DeleteExpired(ctx, time.Now())
+	if e != nil || len(xs) != 1 || xs[0].ID != x.ID {
+		t.Fatalf("expired=%+v err=%v", xs, e)
+	}
+	if xs, e = s.Samples(ctx, id); e != nil || len(xs) != 0 {
+		t.Fatalf("samples=%+v err=%v", xs, e)
+	}
+}

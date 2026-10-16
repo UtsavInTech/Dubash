@@ -1,11 +1,376 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Know Your Speaker · Dubash</title><link rel="preload" href="/static/fonts/inclusive-sans.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/static/css/app.css"><link rel="stylesheet" href="/static/css/workspace.css"><link rel="stylesheet" href="/static/css/flow.css"><link rel="stylesheet" href="/static/css/speakers.css"></head>
-<body class="workspace admin-workspace"><a class="skip" href="#main">Skip to content</a><header class="app-header"><a class="wordmark" href="/admin"><span class="brand-mark" aria-hidden="true">d<span>:</span></span>dubash</a><nav aria-label="Main navigation"><a href="/admin">Events</a><a href="/bank">Vocabulary</a><a href="/speakers" aria-current="page">Know Your Speaker</a><a href="/">Audience view ↗</a></nav><button id="sign-out" class="quiet-button" type="button">Sign out</button></header>
-<main id="main" class="workspace-main speaker-layout"><aside class="speaker-sidebar"><p class="eyebrow">SPEAKER STUDIO</p><h1>Know Your Speaker<span class="accent">.</span></h1><p>Give Dubash the names, phrases and context that make one speaker sound like themselves.</p><nav aria-label="Speaker profile sections"><a href="#profile">Profile</a><a href="#permission">Consent & privacy</a><a href="#recordings">Voice samples</a><a href="#words">My words</a></nav><p class="sidebar-note">Voice samples are private to organisers and automatically deleted on the selected schedule.</p></aside>
-<section class="speaker-canvas"><div id="error" class="error" role="alert"></div><div id="notice" class="notice" role="status" hidden></div>
-<section id="profile" class="speaker-section"><div class="speaker-section-head"><div><p class="eyebrow">01 · PROFILE</p><h2>How should Dubash know this speaker?</h2></div><label class="field profile-picker"><span>Saved profiles</span><select id="profile-select"><option value="">＋ New speaker</option></select></label></div><form id="profile-form" class="speaker-form"><input id="profile-id" type="hidden"><label class="field"><span>Speaker’s name</span><input id="display-name" maxlength="160" required placeholder="The name they want audiences to see"></label><fieldset class="field language-choices"><legend>Languages they speak or mix</legend><label><input type="checkbox" name="language" value="hi"> Hindi</label><label><input type="checkbox" name="language" value="en"> English</label><label><input type="checkbox" name="language" value="ta"> Tamil</label><label><input type="checkbox" name="language" value="kn"> Kannada</label><label><input type="checkbox" name="language" value="te"> Telugu</label><label><input type="checkbox" name="language" value="ml"> Malayalam</label><label><input type="checkbox" name="language" value="mr"> Marathi</label><label><input type="checkbox" name="language" value="bn"> Bengali</label></fieldset><div class="form-pair"><label class="field"><span>Speaking style</span><select id="style"><option value="discourse">Discourse</option><option value="comedy">Comedy</option><option value="politics">Politics</option><option value="lecture">Lecture</option><option value="other">Other</option></select></label><label class="field"><span>Usual events or context</span><input id="notes" maxlength="2000" placeholder="e.g. evening pravachan, community hall"></label></div><button class="button primary" type="submit">Save speaker profile</button></form></section>
-<section id="permission" class="speaker-section"><div class="speaker-section-head"><div><p class="eyebrow">02 · PERMISSION</p><h2>Choose what Dubash may use</h2><p class="muted">Each permission is separate and starts off. A withdrawal is recorded and takes effect immediately.</p></div></div><div class="consent-grid"><label class="consent-row"><input id="consent-recognition" type="checkbox"><span><strong>Improve speech recognition</strong><small>Use this speaker’s recordings and word list to recognise their speech better. Required to upload samples.</small></span></label><label class="consent-row"><input id="consent-storage" type="checkbox"><span><strong>Store recordings temporarily</strong><small>Keep samples only for this period, then delete them automatically.</small></span></label><label class="consent-row disabled-consent"><input type="checkbox" disabled><span><strong>Synthetic voice · coming later</strong><small>Create a synthetic copy of this speaker’s voice to speak translations. Disabled until the speaker can confirm this themselves.</small></span></label><div class="deepfake-warning"><strong>Voice safety</strong><p>A synthetic voice can be used to fake speech. Dubash will not create one in this phase. Any future synthetic speech must be labelled for listeners and requires the speaker’s own separate confirmation.</p></div><label class="consent-row"><input id="consent-terms" type="checkbox"><span><strong>Accept the current documents</strong><small><a href="/terms" target="_blank" rel="noopener">Terms · v0.1</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy · v0.1</a> · Draft, to be reviewed by a lawyer.</small></span></label></div><div class="form-pair"><label class="field"><span>Who is accepting?</span><select id="consent-by"><option value="speaker">I am the speaker</option><option value="organiser">I am the organiser and have written permission</option></select></label><label class="field"><span>Delete recordings after</span><select id="retention"><option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">365 days</option></select></label></div><label id="written-wrap" class="consent-row written-confirm" hidden><input id="written-permission" type="checkbox"><span><strong>I have the speaker’s written permission</strong><small>Phase C will require their own confirmation link.</small></span></label><button id="save-consent" class="button secondary" type="button" disabled>Save consent choices</button><p id="consent-state" class="hint" aria-live="polite"></p></section>
-<section id="recordings" class="speaker-section"><div class="speaker-section-head"><div><p class="eyebrow">03 · VOICE SAMPLES</p><h2>A few minutes in their own voice</h2><p class="muted">Upload clean, naturally spoken audio. WAV receives signal checks; MP3 and M4A are accepted with checks marked “not analysed”.</p></div><div class="sample-total"><strong id="total-minutes">0</strong><span>of 30 minutes</span></div></div><div class="progress-track" role="progressbar" aria-label="Stored voice samples" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0"><span id="progress-fill"></span></div><form id="upload-form" class="upload-area"><label class="field"><span>Audio file · 1–15 minutes · up to 60 MB</span><input id="sample-file" name="file" type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" required></label><label class="field"><span>Optional transcript</span><textarea name="transcript" rows="2" placeholder="Words spoken in this sample"></textarea></label><button id="upload-button" class="button primary" type="submit" disabled>Upload private sample</button><div id="upload-progress" class="upload-progress" hidden><span></span></div><p id="upload-state" class="hint" aria-live="polite"></p></form><div class="table-wrap"><table><thead><tr><th>Recording</th><th>Length</th><th>Signal checks</th><th>Delete after</th><th></th></tr></thead><tbody id="samples"></tbody></table></div></section>
-<section id="words" class="speaker-section"><div class="speaker-section-head"><div><p class="eyebrow">04 · MY WORDS</p><h2>Keep their phrases in context</h2><p class="muted">Each phrase is sent to the Dictation Bank as a suggestion for organiser approval.</p></div></div><form id="word-form" class="speaker-form word-form"><input id="word-id" type="hidden"><label class="field"><span>Said as</span><input id="word-term" required maxlength="120"></label><label class="field"><span>Meaning (English)</span><input id="word-meaning" maxlength="500"></label><label class="field"><span>English rendering</span><input id="word-en"></label><div class="form-pair"><label class="field"><span>Hindi</span><input id="word-hi"></label><label class="field"><span>Kannada</span><input id="word-kn"></label><label class="field"><span>Tamil</span><input id="word-ta"></label><label class="field"><span>Telugu</span><input id="word-te"></label></div><label class="field"><span>Known mis-hearings (one per line)</span><textarea id="word-misheard" rows="2"></textarea></label><div class="row"><button class="button primary" type="submit">Add suggested phrase</button><button id="word-cancel" class="button secondary" type="button" hidden>Cancel edit</button></div></form><div class="table-wrap"><table><thead><tr><th>Said</th><th>Meaning</th><th>English</th><th>Hindi</th><th>Kannada</th><th>Tamil</th><th>Telugu</th><th>Status</th><th></th></tr></thead><tbody id="words-list"></tbody></table></div></section>
-<footer class="studio-footer"><span>Record only with clear permission.</span><span><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span></footer></section></main><script type="module" src="/static/js/speakers.js"></script><script type="module" src="/static/js/deployment.js"></script></body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Know Your Speaker · Dubash</title>
+    <link
+      rel="preload"
+      href="/static/fonts/inclusive-sans.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <link rel="stylesheet" href="/static/css/workspace.css" />
+    <link rel="stylesheet" href="/static/css/flow.css" />
+    <link rel="stylesheet" href="/static/css/speakers.css" />
+  </head>
+  <body class="workspace admin-workspace">
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="app-header">
+      <a class="wordmark" href="/admin"
+        ><span class="brand-mark" aria-hidden="true">d<span>:</span></span
+        >dubash</a
+      >
+      <nav aria-label="Main navigation">
+        <a href="/admin">Events</a><a href="/bank">Vocabulary</a
+        ><a href="/speakers" aria-current="page">Know Your Speaker</a
+        ><a href="/">Audience view ↗</a>
+      </nav>
+      <button id="sign-out" class="quiet-button" type="button">Sign out</button>
+    </header>
+    <main id="main" class="workspace-main speaker-layout">
+      <aside class="speaker-sidebar">
+        <p class="eyebrow">SPEAKER STUDIO</p>
+        <h1>Know Your Speaker<span class="accent">.</span></h1>
+        <p>
+          Give Dubash the names, phrases and context that make one speaker sound
+          like themselves.
+        </p>
+        <nav aria-label="Speaker profile sections">
+          <a href="#profile">Profile</a
+          ><a href="#permission">Consent & privacy</a
+          ><a href="#recordings">Voice samples</a><a href="#words">My words</a>
+        </nav>
+        <p class="sidebar-note">
+          Voice samples are private to organisers and automatically deleted on
+          the selected schedule.
+        </p>
+      </aside>
+      <section class="speaker-canvas">
+        <div id="error" class="error" role="alert"></div>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <section id="profile" class="speaker-section">
+          <div class="speaker-section-head">
+            <div>
+              <p class="eyebrow">01 · PROFILE</p>
+              <h2>How should Dubash know this speaker?</h2>
+            </div>
+            <label class="field profile-picker"
+              ><span>Saved profiles</span
+              ><select id="profile-select">
+                <option value="">＋ New speaker</option>
+              </select></label
+            >
+          </div>
+          <form id="profile-form" class="speaker-form">
+            <input id="profile-id" type="hidden" /><label class="field"
+              ><span>Speaker’s name</span
+              ><input
+                id="display-name"
+                maxlength="160"
+                required
+                placeholder="The name they want audiences to see"
+            /></label>
+            <fieldset class="field language-choices">
+              <legend>Languages they speak or mix</legend>
+              <label
+                ><input type="checkbox" name="language" value="hi" />
+                Hindi</label
+              ><label
+                ><input type="checkbox" name="language" value="en" />
+                English</label
+              ><label
+                ><input type="checkbox" name="language" value="ta" />
+                Tamil</label
+              ><label
+                ><input type="checkbox" name="language" value="kn" />
+                Kannada</label
+              ><label
+                ><input type="checkbox" name="language" value="te" />
+                Telugu</label
+              ><label
+                ><input type="checkbox" name="language" value="ml" />
+                Malayalam</label
+              ><label
+                ><input type="checkbox" name="language" value="mr" />
+                Marathi</label
+              ><label
+                ><input type="checkbox" name="language" value="bn" />
+                Bengali</label
+              >
+            </fieldset>
+            <div class="form-pair">
+              <label class="field"
+                ><span>Speaking style</span
+                ><select id="style">
+                  <option value="discourse">Discourse</option>
+                  <option value="comedy">Comedy</option>
+                  <option value="politics">Politics</option>
+                  <option value="lecture">Lecture</option>
+                  <option value="other">Other</option>
+                </select></label
+              ><label class="field"
+                ><span>Usual events or context</span
+                ><input
+                  id="notes"
+                  maxlength="2000"
+                  placeholder="e.g. evening pravachan, community hall"
+              /></label>
+            </div>
+            <button class="button primary" type="submit">
+              Save speaker profile
+            </button>
+          </form>
+        </section>
+        <section id="permission" class="speaker-section">
+          <div class="speaker-section-head">
+            <div>
+              <p class="eyebrow">02 · PERMISSION</p>
+              <h2>Choose what Dubash may use</h2>
+              <p class="muted">
+                Each permission is separate and starts off. A withdrawal is
+                recorded and takes effect immediately.
+              </p>
+            </div>
+          </div>
+          <div class="consent-grid">
+            <label class="consent-row"
+              ><input id="consent-recognition" type="checkbox" /><span
+                ><strong>Improve speech recognition</strong
+                ><small
+                  >Use this speaker’s recordings and word list to recognise
+                  their speech better. Required to upload samples.</small
+                ></span
+              ></label
+            ><label class="consent-row"
+              ><input id="consent-storage" type="checkbox" /><span
+                ><strong>Store recordings temporarily</strong
+                ><small
+                  >Keep samples only for this period, then delete them
+                  automatically.</small
+                ></span
+              ></label
+            ><label class="consent-row disabled-consent"
+              ><input type="checkbox" disabled /><span
+                ><strong>Synthetic voice · coming later</strong
+                ><small
+                  >Create a synthetic copy of this speaker’s voice to speak
+                  translations. Disabled until the speaker can confirm this
+                  themselves.</small
+                ></span
+              ></label
+            >
+            <div class="deepfake-warning">
+              <strong>Voice safety</strong>
+              <p>
+                A synthetic voice can be used to fake speech. Dubash will not
+                create one in this phase. Any future synthetic speech must be
+                labelled for listeners and requires the speaker’s own separate
+                confirmation.
+              </p>
+            </div>
+            <label class="consent-row"
+              ><input id="consent-terms" type="checkbox" /><span
+                ><strong>Accept the current documents</strong
+                ><small
+                  ><a href="/terms" target="_blank" rel="noopener"
+                    >Terms · v0.1</a
+                  >
+                  and
+                  <a href="/privacy" target="_blank" rel="noopener"
+                    >Privacy · v0.1</a
+                  >
+                  · Draft, to be reviewed by a lawyer.</small
+                ></span
+              ></label
+            >
+          </div>
+          <div class="form-pair">
+            <label class="field"
+              ><span>Who is accepting?</span
+              ><select id="consent-by">
+                <option value="speaker">I am the speaker</option>
+                <option value="organiser">
+                  I am the organiser and have written permission
+                </option>
+              </select></label
+            ><label class="field"
+              ><span>Delete recordings after</span
+              ><select id="retention">
+                <option value="30">30 days</option>
+                <option value="90" selected>90 days</option>
+                <option value="365">365 days</option>
+              </select></label
+            >
+          </div>
+          <label id="written-wrap" class="consent-row written-confirm" hidden
+            ><input id="written-permission" type="checkbox" /><span
+              ><strong>I have the speaker’s written permission</strong
+              ><small
+                >Phase C will require their own confirmation link.</small
+              ></span
+            ></label
+          ><button
+            id="save-consent"
+            class="button secondary"
+            type="button"
+            disabled
+          >
+            Save consent choices
+          </button>
+          <p id="consent-state" class="hint" aria-live="polite"></p>
+        </section>
+        <section id="recordings" class="speaker-section">
+          <div class="speaker-section-head">
+            <div>
+              <p class="eyebrow">03 · VOICE SAMPLES</p>
+              <h2>A few minutes in their own voice</h2>
+              <p class="muted">
+                Upload clean, naturally spoken audio. WAV receives signal
+                checks; MP3 and M4A are accepted with checks marked “not
+                analysed”.
+              </p>
+            </div>
+            <div class="sample-total">
+              <strong id="total-minutes">0</strong><span>of 30 minutes</span>
+            </div>
+          </div>
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-label="Stored voice samples"
+            aria-valuemin="0"
+            aria-valuemax="30"
+            aria-valuenow="0"
+          >
+            <span id="progress-fill"></span>
+          </div>
+          <form id="upload-form" class="upload-area">
+            <label class="field"
+              ><span>Audio file · 1–15 minutes · up to 60 MB</span
+              ><input
+                id="sample-file"
+                name="file"
+                type="file"
+                accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+                required /></label
+            ><label class="field"
+              ><span>Optional transcript</span
+              ><textarea
+                name="transcript"
+                rows="2"
+                placeholder="Words spoken in this sample"
+              ></textarea></label
+            ><button
+              id="upload-button"
+              class="button primary"
+              type="submit"
+              disabled
+            >
+              Upload private sample
+            </button>
+            <div id="upload-progress" class="upload-progress" hidden>
+              <span></span>
+            </div>
+            <p id="upload-state" class="hint" aria-live="polite"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Recording</th>
+                  <th>Length</th>
+                  <th>Signal checks</th>
+                  <th>Delete after</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="samples"></tbody>
+            </table>
+          </div>
+        </section>
+        <section id="words" class="speaker-section">
+          <div class="speaker-section-head">
+            <div>
+              <p class="eyebrow">04 · MY WORDS</p>
+              <h2>Keep their phrases in context</h2>
+              <p class="muted">
+                Each phrase is sent to the Dictation Bank as a suggestion for
+                organiser approval.
+              </p>
+            </div>
+          </div>
+          <form id="word-form" class="speaker-form word-form">
+            <input id="word-id" type="hidden" /><label class="field"
+              ><span>Said as</span
+              ><input id="word-term" required maxlength="120" /></label
+            ><label class="field"
+              ><span>Meaning (English)</span
+              ><input id="word-meaning" maxlength="500" /></label
+            ><label class="field"
+              ><span>English rendering</span><input id="word-en"
+            /></label>
+            <div class="form-pair">
+              <label class="field"
+                ><span>Hindi</span><input id="word-hi" /></label
+              ><label class="field"
+                ><span>Kannada</span><input id="word-kn" /></label
+              ><label class="field"
+                ><span>Tamil</span><input id="word-ta" /></label
+              ><label class="field"
+                ><span>Telugu</span><input id="word-te"
+              /></label>
+            </div>
+            <label class="field"
+              ><span>Known mis-hearings (one per line)</span
+              ><textarea id="word-misheard" rows="2"></textarea>
+            </label>
+            <div class="row">
+              <button class="button primary" type="submit">
+                Add suggested phrase</button
+              ><button
+                id="word-cancel"
+                class="button secondary"
+                type="button"
+                hidden
+              >
+                Cancel edit
+              </button>
+            </div>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Said</th>
+                  <th>Meaning</th>
+                  <th>English</th>
+                  <th>Hindi</th>
+                  <th>Kannada</th>
+                  <th>Tamil</th>
+                  <th>Telugu</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="words-list"></tbody>
+            </table>
+          </div>
+        </section>
+        <footer class="studio-footer">
+          <span>Record only with clear permission.</span
+          ><span
+            ><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span
+          >
+        </footer>
+      </section>
+    </main>
+    <script type="module" src="/static/js/speakers.js"></script>
+    <script type="module" src="/static/js/deployment.js"></script>
+  </body>
+</html>
