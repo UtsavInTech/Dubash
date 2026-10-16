@@ -142,3 +142,12 @@ func TestGoogleOffWithoutOrganisers(t *testing.T) {
 		t.Error("Google sign-in on with nobody allowed")
 	}
 }
+
+func TestBaseURLBehindTLSProxy(t *testing.T) {
+	site, _ := secureServer(t)
+	r, _ := http.NewRequest(http.MethodGet, "http://example.org/", nil)
+	r.Host = "dubash.example.org:443"
+	if got := site.baseURL(r); got != "https://dubash.example.org" {
+		t.Errorf("baseURL = %q", got)
+	}
+}

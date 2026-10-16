@@ -232,11 +232,16 @@ func (s *Server) baseURL(r *http.Request) string {
 	if s.PublicURL != "" {
 		return strings.TrimRight(s.PublicURL, "/")
 	}
-	scheme := "http"
+	scheme, host := "http", r.Host
+	// A proxy that terminates TLS may pass the host as "name:443" without
+	// X-Forwarded-Proto (Zoho Catalyst does).
+	if h, ok := strings.CutSuffix(host, ":443"); ok {
+		scheme, host = "https", h
+	}
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
-	return scheme + "://" + r.Host
+	return scheme + "://" + host
 }
 
 func (s *Server) site(w http.ResponseWriter, r *http.Request) {
