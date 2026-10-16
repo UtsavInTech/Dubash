@@ -378,3 +378,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved and
 
 [Apache-2.0](LICENSE). Typeface: Inclusive Sans (Olivia King), under the SIL
 Open Font License.
+
+
+### Phase 4 deployment
+
+PostgreSQL can now store the event catalog and transcripts, in addition to the
+vocabulary bank. Redis coordinates exclusive room shards; nodes proxy microphone
+WebSockets, captions and controls to the room owner behind nginx. Independent
+speech/translation backups, a provisioned Grafana dashboard, Prometheus alerts
+and offline load/failure tests are included. See [Phase 4 setup and validation](docs/PHASE4.md)
+for deployment commands, test coverage and operational limits. The two-node
+Compose stack defaults to fake providers and spends no Sarvam credits.
